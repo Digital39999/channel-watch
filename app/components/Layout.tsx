@@ -1,6 +1,6 @@
 import { Image, Flex, HStack, IconButton, useColorMode, Heading, Avatar, Divider, Text } from '@chakra-ui/react';
+import { FaMoon, FaSun, FaGithub } from 'react-icons/fa';
 import { LinkButton } from '~/components/Button';
-import { FaMoon, FaSun } from 'react-icons/fa';
 import { useScroll } from '~/hooks/useScroll';
 import { Fragment } from 'react/jsx-runtime';
 import { FiLogIn } from 'react-icons/fi';
@@ -82,6 +82,22 @@ export function Header({
 				</HStack>
 
 				<HStack spacing={2}>
+					<IconButton
+						as={Link}
+						to='https://github.com/Digital39999/channel-watch'
+						variant={'ghost'}
+						rounded={'full'}
+						aria-label='Toggle Mode'
+						boxSize={10}
+						bg={'alpha100'}
+						alignItems={'center'}
+						justifyContent={'center'}
+						display={'flex'}
+						icon={<FaGithub />}
+						_hover={{ bg: 'alpha200' }}
+						_active={{ bg: 'alpha300' }}
+					/>
+
 					<IconButton
 						onClick={toggleColorMode}
 						variant={'ghost'}

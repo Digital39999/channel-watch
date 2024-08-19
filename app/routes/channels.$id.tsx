@@ -55,7 +55,7 @@ async function getGuild({ guildId, current }: GetGuildArgs) {
 async function getMessages({ channelId, before, current }: GetMessagesArgs) {
 	const messageData = await axios({
 		method: 'GET',
-		url: `https://discord.com/api/v10/channels/${channelId}/messages` + '?limit=1' + (before ? `&before=${before}` : ''),
+		url: `https://discord.com/api/v10/channels/${channelId}/messages` + '?limit=100' + (before ? `&before=${before}` : ''),
 		headers: {
 			'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 		},

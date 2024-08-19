@@ -1,0 +1,55 @@
+{
+	"version": "1.0.0",
+	"name": "channel-watch",
+	"author": "Digital39999",
+	"type": "module",
+	"scripts": {
+		"build": "remix vite:build",
+		"dev": "remix vite:dev",
+		"lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
+		"start": "remix-serve ./build/server/index.js",
+		"rebuid": "pnpm build && pnpm start",
+		"typecheck": "tsc --watch"
+	},
+	"license": "MIT",
+	"dependencies": {
+		"@chakra-ui/react": "^2.8.2",
+		"@emotion/cache": "^11.11.0",
+		"@emotion/react": "^11.11.4",
+		"@emotion/server": "^11.11.0",
+		"@emotion/styled": "^11.11.0",
+		"@remix-run/css-bundle": "^2.8.1",
+		"@remix-run/node": "^2.8.1",
+		"@remix-run/react": "^2.8.1",
+		"@remix-run/serve": "^2.8.1",
+		"@skyra/discord-components-react": "4.0.0-alpha.29",
+		"axios": "^1.6.8",
+		"discord-api-types": "^0.37.94",
+		"dotenv": "^16.4.5",
+		"framer-motion": "^11.0.20",
+		"react": "^18.2.0",
+		"react-dom": "^18.2.0",
+		"react-icons": "^5.0.1",
+		"remix-typedjson": "^0.4.1",
+		"zod": "^3.23.8"
+	},
+	"devDependencies": {
+		"@remix-run/dev": "^2.8.1",
+		"@types/react": "^18.2.69",
+		"@types/react-dom": "^18.2.22",
+		"@typescript-eslint/eslint-plugin": "^7.3.1",
+		"@typescript-eslint/parser": "^7.3.1",
+		"eslint": "^8.57.0",
+		"eslint-import-resolver-typescript": "^3.6.1",
+		"eslint-plugin-import": "^2.29.1",
+		"eslint-plugin-jsx-a11y": "^6.8.0",
+		"eslint-plugin-react": "^7.34.1",
+		"eslint-plugin-react-hooks": "^4.6.0",
+		"typescript": "^5.4.3",
+		"vite": "^5.2.6",
+		"vite-tsconfig-paths": "^4.3.2"
+	},
+	"engines": {
+		"node": ">=20.2.0"
+	}
+}

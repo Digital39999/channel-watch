@@ -1,12 +1,7 @@
-version: "3"
+version: '3.8'
+
 services:
   channel-watch:
-    container_name: channel-watch
-    network_mode: bridge
-    pull_policy: build
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: always
+    image: ghcr.io/digital39999/channel-watch:latest
     ports:
-      - 57501:3000
+      - "8080:8080"

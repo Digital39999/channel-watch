@@ -11,7 +11,10 @@ config({ path: '../.env' });
 const isProd = process.env.NODE_ENV === 'production';
 const app = express().disable('x-powered-by');
 
-if (isProd) app.use('/assets', cache(time(365, 'd', 's')), express.static('./build/client/assets'));
+if (isProd) {
+	app.use('/assets', cache(time(365, 'd', 's')), express.static('./build/client/assets'));
+	app.use(express.static('./build/client', { maxAge: '1h' }));
+}
 
 const viteDevServer = isProd
 	? undefined

@@ -36,7 +36,7 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 
 			const data = await axios({
 				method: 'GET',
-				url: '/v10/users/@me',
+				url: '/api/discord/v10/users/@me',
 				headers: {
 					'Authorization': `${isBot ? 'Bot ' : ''}${token}`,
 				},
@@ -95,7 +95,7 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 
 			const data = await axios({
 				method: 'GET',
-				url: '/v10/users/@me',
+				url: '/api/discord/v10/users/@me',
 				headers: {
 					'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 				},
@@ -297,6 +297,7 @@ export default function Index() {
 									aria-label="Log in"
 									icon={<FiLogIn />}
 									fontSize={'2xl'}
+									isDisabled={!currentToken}
 									onClick={() => fetcher.submit({
 										type: 'login',
 										isBot,

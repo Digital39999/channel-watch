@@ -1,3 +1,5 @@
+import { Recents, TimeUnits, WebReturnType } from './types';
+import axios, { AxiosError } from 'axios';
 import { ZodError, ZodIssue } from 'zod';
 
 export function formatBigNumbers(number: number | string) {
@@ -65,4 +67,46 @@ export function parseZodError(error: ZodError) {
 	}
 
 	return errors;
+}
+
+export async function getRecent() {
+	const recentData = await axios<WebReturnType<Recents>>({
+		method: 'GET',
+		url: '/api/recent',
+	}).then((res) => res.data).catch((err: AxiosError<WebReturnType<Recents>>) => err.response?.data);
+	if (!recentData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
+	else if ('error' in recentData) throw new Response(null, { status: 404, statusText: recentData.error });
+
+	return recentData.data;
+}
+
+export async function updateRecent(newData: Recents) {
+	const recentData = await axios({
+		method: 'POST',
+		url: '/api/recent',
+		data: newData,
+		headers: {
+			'Content-Type': 'application/json',
+		},
+	}).then((res) => res.data).catch((err: AxiosError) => err.response?.data);
+	if (!recentData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
+	else if ('error' in recentData) throw new Response(null, { status: 404, statusText: recentData.error });
+
+	return recentData.data;
+}
+
+export function time(number: number, from: TimeUnits = 's', to: TimeUnits = 'ms'): number {
+	const units: Record<TimeUnits, number> = {
+		'ns': 1,
+		'µs': 1000,
+		'ms': 1000000,
+		's': 1000000000,
+		'm': 60000000000,
+		'h': 3600000000000,
+		'd': 86400000000000,
+		'w': 604800000000000,
+	};
+
+	if (from === to) return number;
+	else return (number * units[from]) / units[to];
 }

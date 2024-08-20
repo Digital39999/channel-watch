@@ -5,8 +5,9 @@
 		"**/.server/**/*.ts",
 		"**/.server/**/*.tsx",
 		"**/.client/**/*.ts",
-		"**/.client/**/*.tsx"
+		"**/.client/**/*.tsx",
 	],
+	"exclude": ["../build/server/remix.js"],
 	"compilerOptions": {
 		"lib": [
 			"DOM",

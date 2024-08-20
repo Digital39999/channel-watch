@@ -22,16 +22,15 @@ import {
 	DiscordThread,
 	DiscordVideoAttachment,
 } from '@skyra/discord-components-react';
-import { APIChannel, APIEmoji, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType } from 'discord-api-types/v10';
-import { Channel, Guild } from '~/routes/channels.$id';
+import { APIChannel, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType } from 'discord-api-types/v10';
 import { Text, useColorMode } from '@chakra-ui/react';
+import { Channel, Guild } from '~/other/types';
 import { useCallback, useMemo } from 'react';
 
 export type Mentions = {
 	users: Map<string, APIUser>;
 	roles: Map<string, APIRole>;
 	channels: Map<string, APIChannel>;
-	emotes: Map<string, APIEmoji>;
 };
 
 export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]; guild: Guild; loggedIn?: string; }) {
@@ -65,17 +64,6 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 
 	const getRole = useCallback((id: string) => allRoles.get(id), [allRoles]);
 
-	const allEmojis = useMemo(() => {
-		const emojis = new Map<string, APIEmoji>();
-		for (const emoji of guild.emojis) {
-			if (emoji.id) emojis.set(emoji.id, emoji);
-		}
-
-		return emojis;
-	}, [guild.emojis]);
-
-	const getEmoji = useCallback((id: string) => allEmojis.get(id), [allEmojis]);
-
 	const allChannels = useMemo(() => {
 		const channels = new Map<string, Channel>();
 		for (const channel of guild.channels) {
@@ -105,10 +93,8 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 						message={message}
 						getUser={getUser}
 						getRole={getRole}
-						getEmoji={getEmoji}
 						getChannel={getChannel}
 
-						allEmojis={allEmojis}
 						allChannels={allChannels}
 					/>
 				);
@@ -122,17 +108,14 @@ export function SingleMessage({
 	message,
 	getRole,
 
-	allEmojis,
 	allChannels,
 }: {
 	loggedIn?: string;
 	message: APIMessage;
 	getUser: (id: string) => APIUser | undefined;
 	getRole: (id: string) => APIRole | undefined;
-	getEmoji: (id: string) => APIEmoji | undefined;
 	getChannel: (id: string) => Channel | undefined;
 
-	allEmojis: Map<string, APIEmoji>;
 	allChannels: Map<string, Channel>;
 }) {
 	const mentions = useMemo(() => {
@@ -227,7 +210,6 @@ export function SingleMessage({
 				>
 					{parseText(message.referenced_message.content, {
 						...refMentions,
-						emotes: allEmojis,
 						channels: allChannels,
 					}, false)}
 				</DiscordReply>
@@ -244,7 +226,7 @@ export function SingleMessage({
 				/>
 			)}
 
-			{parseText(message.content, { ...mentions, emotes: allEmojis, channels: allChannels }, false)}
+			{parseText(message.content, { ...mentions, channels: allChannels }, false)}
 
 			{/* {hasTenorVideo && (
 				<DiscordTenorVideo slot='attachments' url={getTenorVideo(message.content)!} />
@@ -333,7 +315,7 @@ export function SingleMessage({
 					video={embed.video?.url}
 					image={embed.image?.url}
 				>
-					{embed.description && <DiscordEmbedDescription slot='description'>{parseText(embed.description, { ...mentions, emotes: allEmojis, channels: allChannels }, true)}</DiscordEmbedDescription>}
+					{embed.description && <DiscordEmbedDescription slot='description'>{parseText(embed.description, { ...mentions, channels: allChannels }, true)}</DiscordEmbedDescription>}
 					{embed.fields && embed.fields.length > 0 && (
 						<DiscordEmbedFields slot='fields'>
 							{embed.fields.map((field, index) => (
@@ -342,7 +324,7 @@ export function SingleMessage({
 									fieldTitle={field.name}
 									inline={field.inline}
 								>
-									{parseText(field.value, { ...mentions, emotes: allEmojis, channels: allChannels }, true)}
+									{parseText(field.value, { ...mentions, channels: allChannels }, true)}
 								</DiscordEmbedField>
 							))}
 						</DiscordEmbedFields>
@@ -383,7 +365,7 @@ export function SingleMessage({
 
 												break;
 											}
-											case ComponentType.SelectMenu: {
+											case ComponentType.StringSelect: {
 												return (
 													<DiscordStringSelectMenu
 														key={index}
@@ -402,6 +384,7 @@ export function SingleMessage({
 													</DiscordStringSelectMenu>
 												);
 											}
+											default: return null;
 										}
 									})}
 								</DiscordActionRow>
@@ -431,7 +414,7 @@ export function SingleMessage({
 }
 
 export function SystemMessage({ message, guild, key }: { message: APIMessage; guild: Guild; key: number; }) {
-	type Type = 'thread' | 'join' | 'alert' | 'error' | 'boost' | 'call' | 'edit' | 'leave' | 'missed-call' | 'pin';
+	type Type = 'thread' | 'join' | 'alert' | 'error' | 'boost' | 'call' | 'edit' | 'leave' | 'missed-call' | 'pin' | 'upgrade';
 
 	const { colorMode } = useColorMode();
 
@@ -476,8 +459,29 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 		return `${seconds} second${seconds === 1 ? '' : 's'}`;
 	}, []);
 
-	switch (message.type) {
-		case MessageType.Default: case MessageType.Reply: return null;
+	const getWelcomeMessage = useCallback((username: string, timestamp: string) => {
+		const unixTimestamp = new Date(timestamp).getTime() % 13;
+
+		switch (unixTimestamp) {
+			case 0: return `${username} joined the party.`;
+			case 1: return `${username} is here.`;
+			case 2: return `Welcome, ${username}. We hope you brought pizza.`;
+			case 3: return `A wild ${username} appeared.`;
+			case 4: return `${username} just landed.`;
+			case 5: return `${username} just slid into the server.`;
+			case 6: return `${username} just showed up!`;
+			case 7: return `Welcome ${username}. Say hi!`;
+			case 8: return `${username} hopped into the server.`;
+			case 9: return `Everyone welcome ${username}!`;
+			case 10: return `Glad you're here, ${username}.`;
+			case 11: return `Good to see you, ${username}.`;
+			case 12: return `Yay you made it, ${username}!`;
+			default: return `Hi ${username}!`;
+		}
+	}, []);
+
+	switch (message.type as (MessageType | (number & {}))) { // eslint-disable-line
+		case MessageType.Default: return null;
 		case MessageType.RecipientAdd: return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> added <i>${message.mentions[0].username}</i> to the group.`);
 		case MessageType.RecipientRemove: return getSystemMessage(message, 'leave', `<i>${message.author?.username}</i> removed <i>${message.mentions[0].username}</i> from the group.`);
 		case MessageType.Call: {
@@ -487,7 +491,7 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 		case MessageType.ChannelNameChange: return getSystemMessage(message, 'edit', `<i>${message.author?.username}</i> changed the channel name: ${message.content}.`, true);
 		case MessageType.ChannelIconChange: return getSystemMessage(message, 'edit', `<i>${message.author?.username}</i> changed the group icon.`);
 		case MessageType.ChannelPinnedMessage: return getSystemMessage(message, 'pin', `<i>${message.author?.username}</i> pinned <i>a message</i> to this channel. See all <i>pinned messages</i>.`);
-		case MessageType.UserJoin: return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> joined the server.`);
+		case MessageType.UserJoin: return getSystemMessage(message, 'join', getWelcomeMessage(`<i>${message.author?.username}</i>`, message.timestamp));
 		case MessageType.GuildBoost: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server!`);
 		case MessageType.GuildBoostTier1: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server! ${guild.name} has achieved **Level 1**!`);
 		case MessageType.GuildBoostTier2: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server! ${guild.name} has achieved **Level 2**!`);
@@ -498,35 +502,42 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 		case MessageType.GuildDiscoveryGracePeriodInitialWarning: return getSystemMessage(message, 'alert', 'This server has failed Discovery activity requirements for 1 week. If this server fails for 4 weeks in a row, it will be automatically removed from Discovery.');
 		case MessageType.GuildDiscoveryGracePeriodFinalWarning: return getSystemMessage(message, 'alert', 'This server has failed Discovery activity requirements for 3 weeks in a row. If this server fails for 1 more week, it will be removed from Discovery');
 		case MessageType.ThreadCreated: return getSystemMessage(message, 'thread', `<i>${message.author?.username}</i> started a thread: ${message.thread?.name}. See all <i>threads</i>.`, true);
+		case MessageType.Reply: return null;
 		case MessageType.ChatInputCommand: return null;
 		case MessageType.ThreadStarterMessage: return null;
 		case MessageType.GuildInviteReminder: return 1;
 		case MessageType.ContextMenuCommand: return null;
 		case MessageType.AutoModerationAction: return 1;
-		case MessageType.RoleSubscriptionPurchase: return 1;
+		case MessageType.RoleSubscriptionPurchase: {
+			if (message.role_subscription_data?.is_renewal) return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> renewed ${message.role_subscription_data?.tier_name} and has been subscriber of ${guild.name} for ${message.role_subscription_data.total_months_subscribed} month${message.role_subscription_data.total_months_subscribed === 1 ? '' : 's'}.`);
+			else return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> joined ${message.role_subscription_data?.tier_name} and has been subscriber of ${guild.name} for ${message.role_subscription_data?.total_months_subscribed || 1} month${message.role_subscription_data?.total_months_subscribed === 1 ? '' : 's'}.`);
+		}
 		case MessageType.InteractionPremiumUpsell: return 1;
 		case MessageType.StageStart: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> started ${message.content}.`);
 		case MessageType.StageEnd: return getSystemMessage(message, 'missed-call', `<i>${message.author?.username}</i> ended ${message.content}.`);
 		case MessageType.StageSpeaker: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> is now a speaker.`);
 		case MessageType.StageRaiseHand: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> requested to speak.`);
 		case MessageType.StageTopic: return getSystemMessage(message, 'edit', `<i>${message.author?.username}</i> changed the Stage topic: ${message.content}.`);
-		case MessageType.GuildApplicationPremiumSubscription: return 1;
+		case MessageType.GuildApplicationPremiumSubscription: return getSystemMessage(message, 'upgrade', `<i>${message.author?.username}</i> upgraded ${guild.name} to premium for this server! 🎉`);
 		case MessageType.GuildIncidentAlertModeEnabled: return 1;
 		case MessageType.GuildIncidentAlertModeDisabled: return 1;
 		case MessageType.GuildIncidentReportRaid: return 1;
 		case MessageType.GuildIncidentReportFalseAlarm: return 1;
+		// case 44: return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> has purchased ${message.purchase_notification.guild_product_purchase.product_name}!`);
 		default: return 2;
 	}
 }
 
 export function parseText(content: string, mentions: Mentions, inEmbed: boolean) {
-	const parsedMentions = parseMentionsContent(content, mentions);
+	const onlyEmojiMessage = isMessageOnlyEmojis(content);
+
+	const parsedMentions = parseMentionsContent(content, mentions, inEmbed, onlyEmojiMessage);
 	const parsedMarkdown = parseMarkdown(parsedMentions, inEmbed);
 
 	return <Text as={'span'} dangerouslySetInnerHTML={{ __html: parsedMarkdown || '' }} />;
 }
 
-export function parseMentionsContent(content: string, mentions: Mentions) {
+export function parseMentionsContent(content: string, mentions: Mentions, inEmbed: boolean, isOnlyEmoji: boolean) {
 	content = content.replace(/<id:(\w+)>/g, (full, id) => {
 		switch (id) {
 			case 'home': return '<discord-mention type=\'server-guide\'>Server Guide</discord-mention>';
@@ -572,10 +583,8 @@ export function parseMentionsContent(content: string, mentions: Mentions) {
 	});
 
 	content = content.replace(/<a?:(\w+):([0-9]+)>/g, (full, name, id) => {
-		const emoji = mentions.emotes.get(id);
-		if (emoji) return `<discord-custom-emoji name='${name}' embedEmoji='false' url='${`https://cdn.discordapp.com/emojis/${id}.${emoji.animated ? 'gif' : 'png'}`}'></discord-custom-emoji>`;
-
-		return full;
+		const animated = full.startsWith('<a:');
+		return `<discord-custom-emoji name='${name}' ${inEmbed ? 'embedEmoji' : ''} ${isOnlyEmoji ? 'jumbo' : ''} url='${`https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}`}'></discord-custom-emoji>`;
 	});
 
 	return content;
@@ -610,11 +619,11 @@ export function parseMarkdown(content: string, inEmbed: boolean) {
 	});
 
 	content = content.replace(/```(\w+)\n([\s\S]*?)```/g, (_, __, code) => {
-		return `<discord-code multiline='true' ${inEmbed ? 'embed=\'true\'' : ''}>${splitAndTrimAll(code)}</discord-code>`;
+		return `<discord-code multiline ${inEmbed ? 'embed' : ''}>${splitAndTrimAll(code)}</discord-code>`;
 	});
 
 	content = content.replace(/`([^`]+)`/g, (_, code) => {
-		return `<discord-code ${inEmbed ? 'embed=\'true\'' : ''}>${code}</discord-code>`;
+		return `<discord-code ${inEmbed ? 'embed' : ''}>${code}</discord-code>`;
 	});
 
 	content = content.replace(/~~([^~]+)~~/g, (_, text) => {
@@ -625,7 +634,7 @@ export function parseMarkdown(content: string, inEmbed: boolean) {
 		return `<discord-subscript>${text}</discord-subscript>`;
 	});
 
-	content = content.replace(/\n/g, '<br>');
+	content = content.replace(/\n/g, '<br />');
 
 	content = content.replace(/\*\*([^*]+)\*\*/g, (_, text) => {
 		return `<discord-bold>${text}</discord-bold>`;
@@ -648,4 +657,8 @@ export function parseMarkdown(content: string, inEmbed: boolean) {
 	});
 
 	return content;
+}
+
+export function isMessageOnlyEmojis(content: string) {
+	return !content.replace(/<a?:\w+:\d+>/g, '').trim();
 }

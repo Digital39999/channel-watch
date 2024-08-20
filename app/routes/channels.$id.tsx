@@ -1,50 +1,35 @@
-import { APIGuild, APIGuildVoiceChannel, APIMessage, APINewsChannel, APITextChannel } from 'discord-api-types/v10';
-import { Flex, VStack, Box, Text, IconButton, Divider, Tooltip, HStack } from '@chakra-ui/react';
+import { Flex, VStack, Box, Text, IconButton, Divider, Tooltip, HStack, AbsoluteCenter, Spinner } from '@chakra-ui/react';
+import { ClientActionFunctionArgs, ClientLoaderFunctionArgs, Link, useFetcher } from '@remix-run/react';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node';
+import { GetGuildArgs, Channel, GetMessagesArgs } from '~/other/types';
 import { typedjson, useTypedLoaderData } from 'remix-typedjson';
+import { APIGuild, APIMessage } from 'discord-api-types/v10';
 import { FaBackspace, FaDownload } from 'react-icons/fa';
-import { Link, useFetcher } from '@remix-run/react';
-import { recentData } from '~/utils/session.server';
 import { useRootData } from '~/hooks/useRootData';
 import { Messages } from '~/components/Messages';
-import { Recents } from '~/other/types';
+import { getRecent } from '~/other/utils';
 import axios from 'axios';
-
-export type Guild = APIGuild & { channels: Channel[]; };
-export type Channel = APITextChannel | APIGuildVoiceChannel | APINewsChannel;
-
-export type GetGuildArgs = {
-	guildId: string;
-	current: { isBot: boolean; token: string; };
-};
-
-export type GetMessagesArgs = {
-	channelId: string;
-	before?: string;
-	current: { isBot: boolean; token: string; };
-};
 
 async function getGuild({ guildId, current }: GetGuildArgs) {
 	const guildData = await axios({
 		method: 'GET',
-		url: `https://discord.com/api/v10/guilds/${guildId}`,
+		url: `/api/discord/guilds/${guildId}`,
 		headers: {
 			'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 		},
 	}).then((res) => res.data).catch((err) => err.response?.data) as APIGuild | { message: string; };
-	if ('message' in guildData) throw new Response(null, { status: 404, statusText: guildData.message });
-	else if (!guildData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
+	if (!guildData) throw new Response(null, { status: 404, statusText: 'There was an error getting guild data.' });
+	else if ('message' in guildData) throw new Response(null, { status: 404, statusText: guildData.message });
 
 	const guildChannels = await axios({
 		method: 'GET',
-		url: `https://discord.com/api/v10/guilds/${guildId}/channels`,
+		url: `/api/discord/guilds/${guildId}/channels`,
 		headers: {
 			'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 		},
 	}).then((res) => res.data).catch((err) => err.response?.data) as Channel[] | { message: string; };
-	if ('message' in guildChannels) throw new Response(null, { status: 404, statusText: guildChannels.message });
-	else if (!guildChannels) throw new Response(null, { status: 404, statusText: 'Not Found.' });
+	if (!guildChannels) throw new Response(null, { status: 404, statusText: 'There was an error getting guild channels.' });
+	else if ('message' in guildChannels) throw new Response(null, { status: 404, statusText: guildChannels.message });
 
 	return {
 		...guildData,
@@ -55,32 +40,32 @@ async function getGuild({ guildId, current }: GetGuildArgs) {
 async function getMessages({ channelId, before, current }: GetMessagesArgs) {
 	const messageData = await axios({
 		method: 'GET',
-		url: `https://discord.com/api/v10/channels/${channelId}/messages` + '?limit=100' + (before ? `&before=${before}` : ''),
+		url: `/api/discord/channels/${channelId}/messages` + '?limit=100' + (before ? `&before=${before}` : ''),
 		headers: {
 			'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 		},
 	}).then((res) => res.data).catch((err) => err.response?.data) as APIMessage[] | { message: string; };
-	if ('message' in messageData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
-	else if (!messageData?.length) throw new Response(null, { status: 404, statusText: 'Not Found.' });
+	if (!messageData) throw new Response(null, { status: 404, statusText: 'There was an error getting messages.' });
+	else if ('message' in messageData) throw new Response(null, { status: 404, statusText: messageData.message });
 
 	return messageData.reverse();
 }
 
-export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs) => {
 	const url = new URL(request.url);
 	const before = url.searchParams.get('before') || undefined;
 
-	const cookieHeader = request.headers.get('Cookie');
-	const data = (await recentData.parse(cookieHeader) || {}) as Recents;
+	const recentsData = await getRecent();
+	if (!recentsData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
 
-	const current = typeof data.currentIndex === 'number' ? data.all?.[data.currentIndex] || null : null;
-	if (!current?.token) throw new Response(null, { status: 401, statusText: 'Unauthorized.' });
+	const current = typeof recentsData.currentIndex === 'number' ? recentsData.all?.[recentsData.currentIndex] || null : null;
+	if (!current?.token) throw new Response(null, { status: 401, statusText: 'Unable to get current user\'s data.' });
 
 	const channelId = params.id;
 	if (!channelId) throw new Response(null, { status: 400, statusText: 'Bad Request.' });
 
 	const channelData = current.channels?.find((channel) => channel.id === channelId);
-	if (!channelData) throw new Response(null, { status: 403, statusText: 'Forbidden.' });
+	if (!channelData) throw new Response(null, { status: 403, statusText: 'This channel is not accessible.' });
 
 	const guildData = await getGuild({ guildId: channelData.guildId, current: { isBot: current.isBot || false, token: current.token } });
 	const messageData = await getMessages({ channelId, before, current: { isBot: current.isBot || false, token: current.token } });
@@ -93,29 +78,45 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 	});
 };
 
-export const action = async ({ request, params }: ActionFunctionArgs) => {
+const clientAction = async ({ request, params }: ClientActionFunctionArgs) => {
 	const url = new URL(request.url);
 	const before = url.searchParams.get('before') || undefined;
 
-	const cookieHeader = request.headers.get('Cookie');
-	const data = (await recentData.parse(cookieHeader) || {}) as Recents;
+	const recentsData = await getRecent();
+	if (!recentsData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
 
-	const current = typeof data.currentIndex === 'number' ? data.all?.[data.currentIndex] || null : null;
-	if (!current?.token) throw new Response(null, { status: 401, statusText: 'Unauthorized.' });
+	const current = typeof recentsData.currentIndex === 'number' ? recentsData.all?.[recentsData.currentIndex] || null : null;
+	if (!current?.token) throw new Response(null, { status: 401, statusText: 'Unable to get current user\'s data.' });
 
 	const channelId = params.id;
 	if (!channelId) throw new Response(null, { status: 400, statusText: 'Bad Request.' });
 
 	const channelData = current.channels?.find((channel) => channel.id === channelId);
-	if (!channelData) throw new Response(null, { status: 403, statusText: 'Forbidden.' });
+	if (!channelData) throw new Response(null, { status: 403, statusText: 'This channel is not accessible.' });
 
 	return typedjson({
 		messages: await getMessages({ channelId, before, current: { isBot: current.isBot || false, token: current.token } }) || [],
 	});
 };
 
+// Exports.
+
+clientLoader.hydrate = true;
+clientAction.hydrate = true;
+export { clientLoader, clientAction };
+
+export function HydrateFallback() {
+	return (
+		<AbsoluteCenter>
+			<Spinner size='xl' />
+		</AbsoluteCenter>
+	);
+}
+
+// Page.
+
 export default function Channels() {
-	const { initialMessages, channel, guild } = useTypedLoaderData<typeof loader>();
+	const { initialMessages, channel, guild } = useTypedLoaderData<typeof clientLoader>();
 	const [messages, setMessages] = useState<APIMessage[]>(initialMessages as never);
 	const [loading, setLoading] = useState(false);
 	const { current } = useRootData();
@@ -207,7 +208,7 @@ export default function Channels() {
 					maxH="70vh"
 					overflowY="auto"
 					scrollBehavior="smooth"
-					// ref={scrollContainerRef}
+					ref={scrollContainerRef}
 				>
 					<Messages
 						guild={guild}

@@ -4,27 +4,28 @@ import {
 	ModalContent, ModalHeader, ModalFooter, ModalBody,
 	ModalCloseButton, Button, VisuallyHiddenInput,
 	useToast, useColorMode,
+	AbsoluteCenter,
+	Spinner,
 } from '@chakra-ui/react';
 import { APIChannel, APIUser, ChannelType, APIMessage } from 'discord-api-types/v10';
+import { ClientActionFunctionArgs, Link, useFetcher } from '@remix-run/react';
 import { FaFolderPlus, FaRobot, FaTrash, FaUser } from 'react-icons/fa';
 import useFetcherResponse from '~/hooks/useFetcherResponse';
-import { Recents, WebReturnType } from '~/other/types';
+import { getRecent, updateRecent } from '~/other/utils';
 import { redirect, typedjson } from 'remix-typedjson';
-import { ActionFunctionArgs } from '@remix-run/node';
-import { recentData } from '~/utils/session.server';
-import { Link, useFetcher } from '@remix-run/react';
 import { FiLogIn, FiLogOut } from 'react-icons/fi';
 import { useRootData } from '~/hooks/useRootData';
+import { WebReturnType } from '~/other/types';
 import { IoMdRefresh } from 'react-icons/io';
 import { useState } from 'react';
 import axios from 'axios';
 
-export const action = async ({ request }: ActionFunctionArgs) => {
+const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 	const formData = await request.formData();
 	const type = formData.get('type') as string;
 
-	const cookieHeader = request.headers.get('Cookie');
-	const recentsData = (await recentData.parse(cookieHeader) || {}) as Recents;
+	const recentsData = await getRecent();
+	if (!recentsData) return typedjson({ status: 404, error: 'Not Found.' });
 
 	switch (type) {
 		case 'login': {
@@ -35,7 +36,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 			const data = await axios({
 				method: 'GET',
-				url: 'https://discord.com/api/v10/users/@me',
+				url: '/v10/users/@me',
 				headers: {
 					'Authorization': `${isBot ? 'Bot ' : ''}${token}`,
 				},
@@ -75,11 +76,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 				recentsData.all = recentsData.all?.map((x) => x.token === token ? exists : x);
 			}
 
-			return redirect('/', {
-				headers: {
-					'Set-Cookie': await recentData.serialize(recentsData),
-				},
-			});
+			break;
 		}
 		case 'logout': {
 			const currentIndex = recentsData.currentIndex;
@@ -87,11 +84,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 			recentsData.currentIndex = undefined;
 
-			return redirect('/', {
-				headers: {
-					'Set-Cookie': await recentData.serialize(recentsData),
-				},
-			});
+			break;
 		}
 		case 'refresh': {
 			const currentIndex = recentsData.currentIndex;
@@ -102,7 +95,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 			const data = await axios({
 				method: 'GET',
-				url: 'https://discord.com/api/v10/users/@me',
+				url: '/v10/users/@me',
 				headers: {
 					'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 				},
@@ -117,11 +110,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 				avatar: data.avatar ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.${data.avatar.startsWith('a_') ? 'gif' : 'png'}` : null,
 			};
 
-			return redirect('/', {
-				headers: {
-					'Set-Cookie': await recentData.serialize(recentsData),
-				},
-			});
+			break;
 		}
 		case 'checkChannel': {
 			const currentIndex = recentsData.currentIndex;
@@ -135,7 +124,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 			const data = await axios({
 				method: 'GET',
-				url: `https://discord.com/api/v10/channels/${channel}`,
+				url: `/api/discord/channels/${channel}`,
 				headers: {
 					'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 				},
@@ -150,7 +139,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 			const latestMessage = await axios({
 				method: 'GET',
-				url: `https://discord.com/api/v10/channels/${channel}/messages` + ('?limit=1'),
+				url: `/api/discord/channels/${channel}/messages` + ('?limit=1'),
 				headers: {
 					'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 				},
@@ -172,11 +161,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 				exists.name = data.name;
 			}
 
-			return redirect(`/channels/${data.id}`, {
-				headers: {
-					'Set-Cookie': await recentData.serialize(recentsData),
-				},
-			});
+			break;
 		}
 		case 'deleteChannel': {
 			const currentIndex = recentsData.currentIndex;
@@ -189,30 +174,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 			if (!channelId) return typedjson({ status: 400, error: 'Invalid request.' });
 
 			current.channels = current.channels?.filter((x) => x.id !== channelId);
-
-			return redirect('/', {
-				headers: {
-					'Set-Cookie': await recentData.serialize(recentsData),
-				},
-			});
+			break;
 		}
 		case 'deleteUser': {
 			const token = formData.get('token') as string;
 			if (!token) return typedjson({ status: 400, error: 'Invalid token.' });
 
 			recentsData.all = recentsData.all?.filter((x) => x.token !== token);
-
-			return redirect('/', {
-				headers: {
-					'Set-Cookie': await recentData.serialize(recentsData),
-				},
-			});
+			break;
 		}
 		default: {
 			return typedjson({ status: 400, error: 'Invalid request.' });
 		}
 	}
+
+	await updateRecent(recentsData);
+	return redirect('/');
 };
+
+clientAction.hydrate = true;
+export { clientAction };
+
+export function HydrateFallback() {
+	return (
+		<AbsoluteCenter>
+			<Spinner size='xl' />
+		</AbsoluteCenter>
+	);
+}
 
 export default function Index() {
 	const [modalOpen, setModalOpen] = useState<boolean>(false);
@@ -313,7 +302,7 @@ export default function Index() {
 										isBot,
 										token: currentToken,
 									}, {
-										method: 'post',
+										method: 'POST',
 									})}
 								/>
 							</Tooltip>
@@ -381,7 +370,7 @@ export default function Index() {
 													type: 'deleteChannel',
 													channelId: channel.id,
 												}, {
-													method: 'post',
+													method: 'POST',
 												})}
 											/>
 										</Tooltip>
@@ -455,7 +444,7 @@ export default function Index() {
 													type: 'deleteUser',
 													token: recent.token || '',
 												}, {
-													method: 'post',
+													method: 'POST',
 												})}
 											/>
 										</Tooltip>
@@ -469,7 +458,7 @@ export default function Index() {
 													isBot: recent.isBot || false,
 													token: recent.token || '',
 												}, {
-													method: 'post',
+													method: 'POST',
 												})}
 											/>
 										</Tooltip>

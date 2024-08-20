@@ -4,4 +4,4 @@ services:
   channel-watch:
     image: ghcr.io/digital39999/channel-watch:latest
     ports:
-      - "8080:8080"
+      - "3000:3000"

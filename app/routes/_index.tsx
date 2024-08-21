@@ -12,11 +12,11 @@ import { ClientActionFunctionArgs, Link, useFetcher } from '@remix-run/react';
 import { FaFolderPlus, FaRobot, FaTrash, FaUser } from 'react-icons/fa';
 import useFetcherResponse from '~/hooks/useFetcherResponse';
 import { getRecent, updateRecent } from '~/other/utils';
-import { redirect, typedjson } from 'remix-typedjson';
 import { FiLogIn, FiLogOut } from 'react-icons/fi';
 import { useRootData } from '~/hooks/useRootData';
 import { WebReturnType } from '~/other/types';
 import { IoMdRefresh } from 'react-icons/io';
+import { redirect, typedjson } from 'remix-typedjson';
 import { useState } from 'react';
 import axios from 'axios';
 
@@ -80,15 +80,15 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 		}
 		case 'logout': {
 			const currentIndex = recentsData.currentIndex;
-			if (currentIndex === undefined) return typedjson({ status: 400, error: 'Invalid request.' });
+			if (typeof currentIndex !== 'number' || currentIndex < 0) return typedjson({ status: 400, error: 'Invalid request.' });
 
-			recentsData.currentIndex = undefined;
+			recentsData.currentIndex = -1;
 
 			break;
 		}
 		case 'refresh': {
 			const currentIndex = recentsData.currentIndex;
-			if (currentIndex === undefined) return typedjson({ status: 400, error: 'Invalid request.' });
+			if (typeof currentIndex !== 'number' || currentIndex < 0) return typedjson({ status: 400, error: 'Invalid request.' });
 
 			const current = recentsData.all?.[currentIndex];
 			if (!current) return typedjson({ status: 400, error: 'Invalid request.' });
@@ -114,7 +114,7 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 		}
 		case 'checkChannel': {
 			const currentIndex = recentsData.currentIndex;
-			if (currentIndex === undefined) return typedjson({ status: 400, error: 'Invalid request.' });
+			if (typeof currentIndex !== 'number' || currentIndex < 0) return typedjson({ status: 400, error: 'Invalid request.' });
 
 			const current = recentsData.all?.[currentIndex];
 			if (!current) return typedjson({ status: 400, error: 'Invalid request.' });
@@ -165,7 +165,7 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 		}
 		case 'deleteChannel': {
 			const currentIndex = recentsData.currentIndex;
-			if (currentIndex === undefined) return typedjson({ status: 400, error: 'Invalid request.' });
+			if (typeof currentIndex !== 'number' || currentIndex < 0) return typedjson({ status: 400, error: 'Invalid request.' });
 
 			const current = recentsData.all?.[currentIndex];
 			if (!current) return typedjson({ status: 400, error: 'Invalid request.' });
@@ -188,7 +188,9 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 		}
 	}
 
-	await updateRecent(recentsData);
+	const cookie = await updateRecent(recentsData);
+	if (!cookie) return typedjson({ status: 500, error: 'Unable to update cookie.' });
+
 	return redirect('/');
 };
 
@@ -359,7 +361,7 @@ export default function Index() {
 									p={4}
 								>
 									<Text fontSize="xl" color="alpha900">
-										{channel.name}
+										{(channel.name?.length || 0) > 20 ? `${channel.name?.slice(0, 20)}..` : channel.name}
 									</Text>
 
 									<HStack>
@@ -423,17 +425,17 @@ export default function Index() {
 							{recentData.all?.length ? recentData.all?.map((recent, index) => (
 								<Flex
 									key={index}
-									as="button"
-									type="submit"
-									flexDir="column"
+									_hover={{ bg: 'alpha300' }}
 									justifyContent="space-between"
+									transition={'all 0.2s'}
 									alignItems="center"
 									borderRadius={8}
+									flexDir="row"
 									bg="alpha200"
 									p={4}
 								>
 									<Text fontSize="xl" color="alpha900">
-										{recent.info?.name}
+										{(recent.info?.name.length || 0) > 20 ? `${recent.info?.name.slice(0, 20)}..` : recent.info?.name}
 									</Text>
 
 									<HStack>

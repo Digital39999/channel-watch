@@ -1,4 +1,4 @@
-import { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node';
+import { ActionFunctionArgs, LoaderFunctionArgs, json as jsonResponse } from '@remix-run/node';
 import { recentData, RecentSchema } from '~/utils/session.server';
 import { parseZodError } from '~/other/utils';
 import { Recents } from '~/other/types';
@@ -25,20 +25,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-	if (request.method !== 'POST') return json({ status: 400, error: 'Bad Request.' });
+	if (request.method !== 'POST') return json({ status: 405, error: 'Method Not Allowed.' });
 
 	const cookieHeader = request.headers.get('Cookie');
 	if (!cookieHeader) return json({ status: 404, error: 'No cookie header found.' });
 
-	const newCookie = await recentData.parse(cookieHeader);
+	const jsonBody = await request.clone().json();
+	let recentsData = (await recentData.parse(cookieHeader) || {}) as Recents;
 
-	const isValid = RecentSchema.safeParse(newCookie);
-	if (!isValid.success) return { status: 400, error: parseZodError(isValid.error) };
+	const isValid = RecentSchema.safeParse(jsonBody);
+	if (!isValid.success) return json({ status: 400, error: parseZodError(isValid.error) });
 
-	return json({
+	recentsData = isValid.data;
+
+	throw jsonResponse({
 		status: 200,
-		data: newCookie,
+		data: recentsData,
 	}, {
-		'Set-Cookie': await recentData.serialize(newCookie),
+		headers: {
+			'Set-Cookie': await recentData.serialize(recentsData),
+		},
 	});
 }

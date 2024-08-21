@@ -81,14 +81,15 @@ export async function getRecent() {
 }
 
 export async function updateRecent(newData: Recents) {
-	const recentData = await axios({
+	const recentData = await axios<WebReturnType<string>>({
 		method: 'POST',
 		url: '/api/recent',
 		data: newData,
+		withCredentials: true,
 		headers: {
 			'Content-Type': 'application/json',
 		},
-	}).then((res) => res.data).catch((err: AxiosError) => err.response?.data);
+	}).then((res) => res.data).catch((err: AxiosError<WebReturnType<string>>) => err.response?.data);
 	if (!recentData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
 	else if ('error' in recentData) throw new Response(null, { status: 404, statusText: recentData.error });
 

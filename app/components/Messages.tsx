@@ -549,33 +549,25 @@ export function parseMentionsContent(content: string, mentions: Mentions, inEmbe
 
 	content = content.replace(/<@!?(\d+)>/g, (full, id) => {
 		const user = mentions.users.get(id);
-		if (user) return `<discord-mention type='user' id='${id}'>${user.username}</discord-mention>`;
-
-		return full;
+		return `<discord-mention type='user' id='${id}'>${user?.username || id}</discord-mention>`;
 	});
 
 	content = content.replace(/<@&(\d+)>/g, (full, id) => {
 		const role = mentions.roles.get(id);
-		if (role) return `<discord-mention type='role' id='${id}'>${role.name}</discord-mention>`;
-
-		return full;
+		return `<discord-mention type='role' id='${id}'>${role?.name || id}</discord-mention>`;
 	});
 
 	content = content.replace(/<#(\d+)>/g, (full, id) => {
 		const channel = mentions.channels.get(id);
-		if (channel) {
-			const type =
-				channel.type === ChannelType.GuildText ? 'channel' :
-					channel.type === ChannelType.GuildVoice ? 'voice' :
-						channel.type === ChannelType.GuildForum ? 'forum' :
-							channel.type === ChannelType.PrivateThread ? 'thread' :
-								channel.type === ChannelType.PublicThread ? 'thread' :
-									'channel';
+		const type =
+			channel?.type === ChannelType.GuildText ? 'channel' :
+				channel?.type === ChannelType.GuildVoice ? 'voice' :
+					channel?.type === ChannelType.GuildForum ? 'forum' :
+						channel?.type === ChannelType.PrivateThread ? 'thread' :
+							channel?.type === ChannelType.PublicThread ? 'thread' :
+								'channel';
 
-			return `<discord-mention type='${type}' id='${id}'>${channel.name}</discord-mention>`;
-		}
-
-		return full;
+		return `<discord-mention type='${type}' id='${id}'>${channel?.name || id}</discord-mention>`;
 	});
 
 	content = content.replace(/<\/(\w+):(\d+)>/g, (_, name, id) => {

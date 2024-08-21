@@ -14,8 +14,6 @@ export function json<T>(data: T, headers?: HeadersInit) {
 
 export async function loader({ request }: LoaderFunctionArgs) {
 	const cookieHeader = request.headers.get('Cookie');
-	if (!cookieHeader) return json({ status: 404, error: 'No cookie header found.' });
-
 	const recentsData = (await recentData.parse(cookieHeader) || {}) as Recents;
 
 	return json({
@@ -28,8 +26,6 @@ export async function action({ request }: ActionFunctionArgs) {
 	if (request.method !== 'POST') return json({ status: 405, error: 'Method Not Allowed.' });
 
 	const cookieHeader = request.headers.get('Cookie');
-	if (!cookieHeader) return json({ status: 404, error: 'No cookie header found.' });
-
 	const jsonBody = await request.clone().json();
 	let recentsData = (await recentData.parse(cookieHeader) || {}) as Recents;
 

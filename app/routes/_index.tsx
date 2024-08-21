@@ -215,7 +215,7 @@ export default function Index() {
 	const fetcher = useFetcher<WebReturnType<string>>();
 	const toast = useToast();
 
-	useFetcherResponse(fetcher, toast);
+	useFetcherResponse(fetcher, toast, () => setModalOpen(false));
 
 	return (
 		<VStack w='100%' align='center' px={4} spacing={{ base: 8, md: '30px' }} mt={{ base: 8, md: 16 }} id='a1'>

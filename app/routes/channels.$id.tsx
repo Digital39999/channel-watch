@@ -1,5 +1,5 @@
 import { Flex, VStack, Box, Text, IconButton, Divider, Tooltip, HStack, AbsoluteCenter, Spinner } from '@chakra-ui/react';
-import { ClientActionFunctionArgs, ClientLoaderFunctionArgs, Link, useFetcher } from '@remix-run/react';
+import { ClientLoaderFunctionArgs, Link, useFetcher } from '@remix-run/react';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { GetGuildArgs, Channel, GetMessagesArgs } from '~/other/types';
 import { typedjson, useTypedLoaderData } from 'remix-typedjson';
@@ -67,43 +67,22 @@ const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs) => {
 	const channelData = current.channels?.find((channel) => channel.id === channelId);
 	if (!channelData) throw new Response(null, { status: 403, statusText: 'This channel is not accessible.' });
 
-	const guildData = await getGuild({ guildId: channelData.guildId, current: { isBot: current.isBot || false, token: current.token } });
+	const guildData = before ? null : await getGuild({ guildId: channelData.guildId, current: { isBot: current.isBot || false, token: current.token } });
 	const messageData = await getMessages({ channelId, before, current: { isBot: current.isBot || false, token: current.token } });
 
 	return typedjson({
 		info: current.info,
-		initialMessages: messageData || [],
+		messages: messageData || [],
 		channel: channelData,
 		guild: guildData,
 	});
 };
 
-const clientAction = async ({ request, params }: ClientActionFunctionArgs) => {
-	const url = new URL(request.url);
-	const before = url.searchParams.get('before') || undefined;
-
-	const recentsData = await getRecent();
-	if (!recentsData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
-
-	const current = typeof recentsData.currentIndex === 'number' ? recentsData.all?.[recentsData.currentIndex] || null : null;
-	if (!current?.token) throw new Response(null, { status: 401, statusText: 'Unable to get current user\'s data.' });
-
-	const channelId = params.id;
-	if (!channelId) throw new Response(null, { status: 400, statusText: 'Bad Request.' });
-
-	const channelData = current.channels?.find((channel) => channel.id === channelId);
-	if (!channelData) throw new Response(null, { status: 403, statusText: 'This channel is not accessible.' });
-
-	return typedjson({
-		messages: await getMessages({ channelId, before, current: { isBot: current.isBot || false, token: current.token } }) || [],
-	});
-};
 
 // Exports.
 
 clientLoader.hydrate = true;
-clientAction.hydrate = true;
-export { clientLoader, clientAction };
+export { clientLoader };
 
 export function HydrateFallback() {
 	return (
@@ -116,43 +95,40 @@ export function HydrateFallback() {
 // Page.
 
 export default function Channels() {
-	const { initialMessages, channel, guild } = useTypedLoaderData<typeof clientLoader>();
+	const { messages: initialMessages, channel, guild } = useTypedLoaderData<typeof clientLoader>();
 	const [messages, setMessages] = useState<APIMessage[]>(initialMessages as never);
-	const [loading, setLoading] = useState(false);
 	const { current } = useRootData();
 
 	const fetcher = useFetcher<{ messages: APIMessage[] }>();
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-	const lastMessageId = useMemo(() => messages[0]?.id, [messages]);
+	const lastMessageId = useMemo(() => messages.length > 0 ? messages[messages.length - 1]?.id : null, [messages]);
 
 	useEffect(() => {
-		if (fetcher.state === 'submitting') setLoading(true);
-		else if (!fetcher.data || fetcher.state === 'loading') return;
-
-		if (fetcher.data?.messages) {
+		console.log('setting new messages', fetcher.data?.messages.length);
+		if (fetcher.data?.messages.length) {
 			setMessages((prev) => [
-				...(fetcher.data?.messages as APIMessage[]).reverse(),
+				...(fetcher.data?.messages as APIMessage[]),
 				...prev,
 			]);
 		}
-	}, [fetcher.state, fetcher.data]);
+	}, [fetcher.data]);
 
 	const loadNext = useCallback(() => {
-		if (loading || !lastMessageId) return;
-		fetcher.submit(`?before=${lastMessageId}`, { method: 'POST' });
-	}, [loading, fetcher, lastMessageId]);
+		if (!lastMessageId || fetcher.state === 'loading' || fetcher.state === 'submitting') return;
+		fetcher.submit(`?before=${lastMessageId}`);
+	}, [fetcher, lastMessageId]);
 
-	const scrollToBottom = () => {
+	const scrollToBottom = useCallback(() => {
 		if (scrollContainerRef.current) {
 			scrollContainerRef.current.scrollTo({
 				top: scrollContainerRef.current.scrollHeight,
 				behavior: 'smooth',
 			});
 		}
-	};
+	}, [scrollContainerRef]);
 
-	useEffect(() => { scrollToBottom(); }, []);
+	useEffect(() => { scrollToBottom(); }, []); // eslint-disable-line
 
 	return (
 		<VStack w='100%' align='center' px={4} spacing={{ base: 8, md: '30px' }} mt={{ base: 8, md: 16 }} id='a1'>
@@ -162,9 +138,9 @@ export default function Channels() {
 					justifyContent={'space-between'}
 					alignItems={'center'}
 					borderRadius={8}
-					bg="alpha100"
+					bg='alpha100'
 					gap={2}
-					w="100%"
+					w='100%'
 					p={4}
 				>
 					<Text
@@ -189,7 +165,7 @@ export default function Channels() {
 								size='lg'
 								aria-label='Load More'
 								icon={<FaDownload />}
-								isLoading={loading}
+								isLoading={fetcher.state === 'loading' || fetcher.state === 'submitting'}
 								onClick={loadNext}
 							/>
 						</Tooltip>
@@ -199,25 +175,25 @@ export default function Channels() {
 				<Divider my={4} />
 
 				<Flex
-					direction="column-reverse"
-					justifyContent="flex-start"
-					alignItems="stretch"
+					direction='column-reverse'
+					justifyContent='flex-start'
+					alignItems='stretch'
 					borderRadius={8}
-					bg="alpha100"
-					w="100%"
-					maxH="70vh"
-					overflowY="auto"
-					scrollBehavior="smooth"
+					bg='alpha100'
+					w='100%'
+					maxH='70vh'
+					overflowY='auto'
+					scrollBehavior='smooth'
 					ref={scrollContainerRef}
 				>
 					<Messages
-						guild={guild}
+						guild={guild!}
 						messages={messages}
 						loggedIn={current?.info?.id}
 					/>
 
-					{loading && (
-						<Box p={2} borderRadius={8} bg="alpha200">
+					{(fetcher.state === 'loading' || fetcher.state === 'submitting') && (
+						<Box p={2} borderRadius={8} bg='alpha200'>
 							<Text>Loading...</Text>
 						</Box>
 					)}

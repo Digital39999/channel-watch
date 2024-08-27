@@ -1,9 +1,8 @@
-import { LinksFunction, LoaderFunctionArgs, MetaFunction } from '@remix-run/node';
+import { AbsoluteCenter, ChakraProvider, Flex, Spinner } from '@chakra-ui/react';
 import { Outlet, isRouteErrorResponse, useRouteError } from '@remix-run/react';
 import { typedjson, useTypedLoaderData } from 'remix-typedjson';
-import { ChakraProvider, Flex } from '@chakra-ui/react';
+import { LinksFunction, MetaFunction } from '@remix-run/node';
 import { cssBundleHref } from '@remix-run/css-bundle';
-import { recentData } from './utils/session.server';
 import InfoComponent from '~/components/Info';
 import theme from '~/components/theme/base';
 import Layout from '~/components/Layout';
@@ -11,6 +10,7 @@ import { Recents } from './other/types';
 import { Document } from '~/document';
 
 import '~/styles/global.css';
+import { getRecent } from './other/utils';
 
 export const links: LinksFunction = () => [
 	...(cssBundleHref ? [{ rel: 'stylesheet', href: cssBundleHref }] : []),
@@ -35,9 +35,8 @@ export const meta: MetaFunction = () => {
 	];
 };
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-	const cookieHeader = request.headers.get('Cookie');
-	const data = (await recentData.parse(cookieHeader) || {}) as Recents;
+const clientLoader = async () => {
+	const data = await getRecent() || { currentIndex: -1, all: [] } as Recents;
 
 	return typedjson({
 		currentIndex: data.currentIndex,
@@ -46,8 +45,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 	});
 };
 
+clientLoader.hydrate = true;
+export { clientLoader };
+
+export function HydrateFallback() {
+	return (
+		<Document>
+			<ChakraProvider theme={theme}>
+				<Layout>
+					<AbsoluteCenter>
+						<Spinner size='xl' />
+					</AbsoluteCenter>
+				</Layout>
+			</ChakraProvider>
+		</Document>
+	);
+}
+
 export default function App() {
-	const { current } = useTypedLoaderData<typeof loader>();
+	const { current } = useTypedLoaderData<typeof clientLoader>();
 
 	return (
 		<Document>

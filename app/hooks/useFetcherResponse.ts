@@ -3,10 +3,10 @@ import { CreateToastFnReturn } from '@chakra-ui/react';
 import { WebReturnType } from '~/other/types';
 import { useEffect } from 'react';
 
-export default function useFetcherResponse<T>(
-	fetcher: FetcherWithComponents<WebReturnType<T>>,
+export default function useFetcherResponse(
+	fetcher: FetcherWithComponents<WebReturnType<string>>,
 	toast: CreateToastFnReturn,
-	onSuccess?: (data: { status: 200; data: T; }) => void,
+	onSuccess?: (data: { status: 200; data: string; }) => void,
 ) {
 	useEffect(() => {
 		if (fetcher?.data) {
@@ -23,5 +23,5 @@ export default function useFetcherResponse<T>(
 
 			if (fetcher.data.status === 200 && onSuccess) onSuccess(fetcher.data);
 		}
-	}, [fetcher.data, onSuccess, toast]);
+	}, [fetcher.data]); // eslint-disable-line
 }

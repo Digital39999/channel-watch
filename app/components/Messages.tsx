@@ -23,9 +23,17 @@ import {
 	DiscordVideoAttachment,
 } from '@skyra/discord-components-react';
 import { APIChannel, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType } from 'discord-api-types/v10';
+import { useCallback, useMemo, useState } from 'react';
 import { Text, useColorMode } from '@chakra-ui/react';
 import { Channel, Guild } from '~/other/types';
-import { useCallback, useMemo } from 'react';
+
+const NormalMessages = [
+	MessageType.Default,
+	MessageType.Reply,
+	MessageType.ChatInputCommand,
+	MessageType.ThreadStarterMessage,
+	MessageType.ContextMenuCommand,
+];
 
 export type Mentions = {
 	users: Map<string, APIUser>;
@@ -34,7 +42,10 @@ export type Mentions = {
 };
 
 export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]; guild: Guild; loggedIn?: string; }) {
+	const [highlighted, setHighlighted] = useState<string | null>(null);
 	const { colorMode } = useColorMode();
+
+	const messagesKey = useMemo(() => `${messages?.[0]?.id}-${Date.now()}`, [messages]);
 
 	const allUsers = useMemo(() => {
 		const users = new Map<string, APIUser>();
@@ -75,20 +86,14 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 
 	const getChannel = useCallback((id: string) => allChannels.get(id), [allChannels]);
 
-	const InfoMessage = useCallback(({ content }: { content: string; }) => {
-		return <DiscordMessage author='System' timestamp={new Date()}>{content}</DiscordMessage>;
-	}, []);
-
 	return (
-		<DiscordMessages lightTheme={colorMode === 'light'} compactMode={false}>
+		<DiscordMessages lightTheme={colorMode === 'light'} compactMode={false} key={messagesKey}>
 			{messages.map((message, index) => {
-				const component = SystemMessage({ message, guild, key: index });
-				if (component === 1) return <InfoMessage key={index} content='Message type not yet supported.' />;
-				else if (component === 2) return <InfoMessage key={index} content='Unknown message type.' />;
-				else if (component) return component;
+				if (!NormalMessages.includes(message.type)) return SystemMessage({ message, guild, key: `${message.id}-${index}-${messagesKey}` });
 				else return (
 					<SingleMessage
-						key={index}
+						key={`${message.id}-${index}-${messagesKey}`}
+
 						loggedIn={loggedIn}
 						message={message}
 						getUser={getUser}
@@ -96,6 +101,9 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 						getChannel={getChannel}
 
 						allChannels={allChannels}
+						highlighted={highlighted === message.id}
+
+						setHighlighted={setHighlighted}
 					/>
 				);
 			})}
@@ -109,6 +117,9 @@ export function SingleMessage({
 	getRole,
 
 	allChannels,
+	highlighted = false,
+
+	setHighlighted,
 }: {
 	loggedIn?: string;
 	message: APIMessage;
@@ -117,6 +128,9 @@ export function SingleMessage({
 	getChannel: (id: string) => Channel | undefined;
 
 	allChannels: Map<string, Channel>;
+	highlighted: boolean;
+
+	setHighlighted: (id: string) => void;
 }) {
 	const mentions = useMemo(() => {
 		const users = new Map<string, APIUser>();
@@ -184,6 +198,8 @@ export function SingleMessage({
 
 	return (
 		<DiscordMessage
+			verified
+			id={message.id}
 			author={message.author?.username}
 			avatar={message.author?.avatar ? `https://cdn.discordapp.com/avatars/${message.author.id}/${message.author.avatar}.${message.author.avatar.startsWith('a_') ? 'gif' : 'png'}` : undefined}
 			highlight={message.content.includes('@everyone') || message.content.includes('@here') || message.mentions.some((mention) => mention.id === loggedIn)}
@@ -192,11 +208,12 @@ export function SingleMessage({
 			roleColor={colorMode === 'light' ? '#000000' : '#ffffff'}
 			lightTheme={colorMode === 'light'}
 			bot={message.author?.bot ?? false}
-			twentyFour={true}
-			verified
+			style={{ backgroundColor: highlighted ? (colorMode === 'light' ? '#f0f0f0' : '#272939') : undefined }}
+			key={message.id}
 		>
-			{message.referenced_message && (
+			{message.referenced_message?.id && (
 				<DiscordReply
+					verified
 					slot='reply'
 					lightTheme={colorMode === 'light'}
 					author={message.referenced_message.author?.username}
@@ -206,7 +223,16 @@ export function SingleMessage({
 					edited={message.referenced_message.edited_timestamp !== null}
 					attachment={message.referenced_message.attachments.length > 0}
 					mentions={message.referenced_message.mentions.some((mention) => mention.id === message.author?.id)}
-					verified
+					key={`referenced-${message.id}-${message.referenced_message.id}`}
+					onClick={() => {
+						setHighlighted(message.referenced_message!.id);
+
+						const element = document.getElementById(message.referenced_message!.id);
+						if (element) element.scrollIntoView({ behavior: 'smooth' });
+
+						const distance = Math.abs(element!.getBoundingClientRect().top - document.documentElement.getBoundingClientRect().top);
+						setTimeout(() => setHighlighted(''), distance < 1000 ? 3000 : distance);
+					}}
 				>
 					{parseText(message.referenced_message.content, {
 						...refMentions,
@@ -218,6 +244,7 @@ export function SingleMessage({
 			{message.interaction && (
 				<DiscordCommand
 					slot='reply'
+					key={`interaction-${message.id}`}
 					lightTheme={colorMode === 'light'}
 					author={message.interaction_metadata?.user.username}
 					roleColor={colorMode === 'light' ? '#000000' : '#ffffff'}
@@ -237,19 +264,20 @@ export function SingleMessage({
 					slot='thread'
 					lightTheme={colorMode === 'light'}
 					name={message.thread.name || undefined}
+					key={`thread-${message.id}`}
 				>
 					Thread with some messages..
 				</DiscordThread>
 			)}
 
 			{message.attachments && message.attachments.length > 0 && (
-				<DiscordAttachments slot='attachments'>
+				<DiscordAttachments slot='attachments' key={`attachments-${message.id}`}>
 					{message.attachments.map((attachment, index) => {
 						if (attachment.content_type?.startsWith('image/')) {
 							return (
 								<DiscordImageAttachment
-									key={index}
 									url={attachment.url}
+									key={`attachment-${index}-${message.id}`}
 									height={(attachment.height || 0) / 2 || undefined}
 									width={(attachment.width || 0) / 2 || undefined}
 									alt={attachment.description}
@@ -261,8 +289,8 @@ export function SingleMessage({
 						if (attachment.content_type?.startsWith('video/')) {
 							return (
 								<DiscordVideoAttachment
-									key={index}
 									href={attachment.url}
+									key={`attachment-${index}-${message.id}`}
 									poster={attachment.proxy_url}
 									style={{ borderRadius: '8px' }}
 								/>
@@ -272,7 +300,7 @@ export function SingleMessage({
 						if (attachment.content_type?.startsWith('audio/')) {
 							return (
 								<DiscordAudioAttachment
-									key={index}
+									key={`attachment-${index}-${message.id}`}
 									href={attachment.url}
 									name={attachment.filename}
 									style={{ borderRadius: '8px' }}
@@ -284,7 +312,7 @@ export function SingleMessage({
 
 						return (
 							<DiscordFileAttachment
-								key={index}
+								key={`attachment-${index}-${message.id}`}
 								name={attachment.filename}
 								bytes={attachment.size}
 								bytesUnit='B'
@@ -301,7 +329,7 @@ export function SingleMessage({
 
 			{message.embeds ? message.embeds.filter((embed) => embed.type === 'rich').map((embed, index) => (
 				<DiscordEmbed
-					key={index}
+					key={`embed-${index}-${message.id}`}
 					color={embed.color ? getColorInHex(embed.color) : undefined}
 					authorName={embed.author?.name}
 					authorImage={embed.author?.icon_url}
@@ -317,10 +345,10 @@ export function SingleMessage({
 				>
 					{embed.description && <DiscordEmbedDescription slot='description'>{parseText(embed.description, { ...mentions, channels: allChannels }, true)}</DiscordEmbedDescription>}
 					{embed.fields && embed.fields.length > 0 && (
-						<DiscordEmbedFields slot='fields'>
-							{embed.fields.map((field, index) => (
+						<DiscordEmbedFields slot='fields' key={`fields-${index}-${message.id}`}>
+							{embed.fields.map((field, ix) => (
 								<DiscordEmbedField
-									key={index}
+									key={`field-${ix}-${message.id}-${index}`}
 									fieldTitle={field.name}
 									inline={field.inline}
 								>
@@ -347,12 +375,12 @@ export function SingleMessage({
 						if (component.type === 1) {
 							return (
 								<DiscordActionRow key={index}>
-									{component.components.map((comp, index) => {
+									{component.components.map((comp, ix) => {
 										switch (comp.type) {
 											case ComponentType.Button: {
 												if (!('sku_id' in comp)) return (
 													<DiscordButton
-														key={index}
+														key={`button-${ix}-${index}`}
 														disabled={comp.disabled}
 														type={getButtonType(comp.style) as never}
 														url={'url' in comp ? comp.url : undefined}
@@ -368,13 +396,13 @@ export function SingleMessage({
 											case ComponentType.StringSelect: {
 												return (
 													<DiscordStringSelectMenu
-														key={index}
+														key={`select-menu-${ix}-${index}`}
 														disabled={comp.disabled}
 														placeholder={comp.placeholder}
 													>
-														{comp.options.map((option, index) => (
+														{comp.options.map((option, ixn) => (
 															<DiscordStringSelectMenuOption
-																key={index}
+																key={`option-${ixn}-${ix}-${index}`}
 																emoji={option.emoji?.id ? `https://cdn.discordapp.com/emojis/${option.emoji.id}.${option.emoji.animated ? 'gif' : 'png'}` : undefined}
 																emojiName={option.emoji?.name}
 																label={option.label}
@@ -400,11 +428,11 @@ export function SingleMessage({
 				<DiscordReactions slot='reactions'>
 					{message.reactions.map((reaction, index) => (
 						<DiscordReaction
-							key={index}
+							key={`reaction-${index}-${message.id}`}
 							count={reaction.count}
 							name={reaction.emoji.name || undefined}
 							reacted={reaction.me}
-							emoji={`https://cdn.discordapp.com/emojis/${reaction.emoji.id}.${reaction.emoji.animated ? 'gif' : 'png'}`}
+							emoji={reaction.emoji.id ? `https://cdn.discordapp.com/emojis/${reaction.emoji.id}.${reaction.emoji.animated ? 'gif' : 'png'}` : undefined}
 						/>
 					))}
 				</DiscordReactions>
@@ -413,7 +441,7 @@ export function SingleMessage({
 	);
 }
 
-export function SystemMessage({ message, guild, key }: { message: APIMessage; guild: Guild; key: number; }) {
+export function SystemMessage({ message, guild, key }: { message: APIMessage; guild: Guild; key: string; }) {
 	type Type = 'thread' | 'join' | 'alert' | 'error' | 'boost' | 'call' | 'edit' | 'leave' | 'missed-call' | 'pin' | 'upgrade';
 
 	const { colorMode } = useColorMode();
@@ -480,6 +508,18 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 		}
 	}, []);
 
+	const InfoMessage = useCallback(({ content }: { content: string; }) => {
+		return <DiscordMessage author='System' timestamp={new Date()}>{content}</DiscordMessage>;
+	}, []);
+
+	const getNotSupportedMessage = useCallback((type: MessageType) => {
+		return InfoMessage({ content: `Message type not yet supported. (${type})` });
+	}, [InfoMessage]);
+
+	const getUnknownMessage = useCallback((type: MessageType) => {
+		return InfoMessage({ content: `Unknown message type. (${type})` });
+	}, [InfoMessage]);
+
 	switch (message.type as (MessageType | (number & {}))) { // eslint-disable-line
 		case MessageType.Default: return null;
 		case MessageType.RecipientAdd: return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> added <i>${message.mentions[0].username}</i> to the group.`);
@@ -505,26 +545,26 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 		case MessageType.Reply: return null;
 		case MessageType.ChatInputCommand: return null;
 		case MessageType.ThreadStarterMessage: return null;
-		case MessageType.GuildInviteReminder: return 1;
+		case MessageType.GuildInviteReminder: return getNotSupportedMessage(message.type);
 		case MessageType.ContextMenuCommand: return null;
-		case MessageType.AutoModerationAction: return 1;
+		case MessageType.AutoModerationAction: return getNotSupportedMessage(message.type);
 		case MessageType.RoleSubscriptionPurchase: {
 			if (message.role_subscription_data?.is_renewal) return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> renewed ${message.role_subscription_data?.tier_name} and has been subscriber of ${guild.name} for ${message.role_subscription_data.total_months_subscribed} month${message.role_subscription_data.total_months_subscribed === 1 ? '' : 's'}.`);
 			else return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> joined ${message.role_subscription_data?.tier_name} and has been subscriber of ${guild.name} for ${message.role_subscription_data?.total_months_subscribed || 1} month${message.role_subscription_data?.total_months_subscribed === 1 ? '' : 's'}.`);
 		}
-		case MessageType.InteractionPremiumUpsell: return 1;
+		case MessageType.InteractionPremiumUpsell: return getNotSupportedMessage(message.type);
 		case MessageType.StageStart: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> started ${message.content}.`);
 		case MessageType.StageEnd: return getSystemMessage(message, 'missed-call', `<i>${message.author?.username}</i> ended ${message.content}.`);
 		case MessageType.StageSpeaker: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> is now a speaker.`);
 		case MessageType.StageRaiseHand: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> requested to speak.`);
 		case MessageType.StageTopic: return getSystemMessage(message, 'edit', `<i>${message.author?.username}</i> changed the Stage topic: ${message.content}.`);
 		case MessageType.GuildApplicationPremiumSubscription: return getSystemMessage(message, 'upgrade', `<i>${message.author?.username}</i> upgraded ${guild.name} to premium for this server! 🎉`);
-		case MessageType.GuildIncidentAlertModeEnabled: return 1;
-		case MessageType.GuildIncidentAlertModeDisabled: return 1;
-		case MessageType.GuildIncidentReportRaid: return 1;
-		case MessageType.GuildIncidentReportFalseAlarm: return 1;
+		case MessageType.GuildIncidentAlertModeEnabled: return getNotSupportedMessage(message.type);
+		case MessageType.GuildIncidentAlertModeDisabled: return getNotSupportedMessage(message.type);
+		case MessageType.GuildIncidentReportRaid: return getNotSupportedMessage(message.type);
+		case MessageType.GuildIncidentReportFalseAlarm: return getNotSupportedMessage(message.type);
 		// case 44: return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> has purchased ${message.purchase_notification.guild_product_purchase.product_name}!`);
-		default: return 2;
+		default: return getUnknownMessage(message.type);
 	}
 }
 

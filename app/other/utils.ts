@@ -70,30 +70,36 @@ export function parseZodError(error: ZodError) {
 }
 
 export async function getRecent() {
-	const recentData = await axios<WebReturnType<Recents>>({
-		method: 'GET',
-		url: '/api/recent',
+	if (typeof localStorage === 'undefined') return null;
+
+	const encryptedText = localStorage.getItem('recent');
+	if (!encryptedText) return { currentIndex: -1, all: [] } as Recents;
+
+	let recentData = await axios<WebReturnType<Recents>>({
+		method: 'POST',
+		url: '/api/crypto',
+		data: { type: 'decrypt', data: encryptedText },
 	}).then((res) => res.data).catch((err: AxiosError<WebReturnType<Recents>>) => err.response?.data);
-	if (!recentData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
-	else if ('error' in recentData) throw new Response(null, { status: 404, statusText: recentData.error });
+
+	if (!recentData) recentData = { data: {}, status: 200 };
+	else if ('error' in recentData) throw new Response(null, { status: 404, statusText: Array.isArray(recentData.error) ? recentData.error.join('. ') : recentData.error });
 
 	return recentData.data;
 }
 
 export async function updateRecent(newData: Recents) {
-	const recentData = await axios<WebReturnType<string>>({
-		method: 'POST',
-		url: '/api/recent',
-		data: newData,
-		withCredentials: true,
-		headers: {
-			'Content-Type': 'application/json',
-		},
-	}).then((res) => res.data).catch((err: AxiosError<WebReturnType<string>>) => err.response?.data);
-	if (!recentData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
-	else if ('error' in recentData) throw new Response(null, { status: 404, statusText: recentData.error });
+	if (typeof localStorage === 'undefined') return null;
 
-	return recentData.data;
+	const encryptedText = await axios<WebReturnType<string>>({
+		method: 'POST',
+		url: '/api/crypto',
+		data: { type: 'encrypt', data: JSON.stringify(newData) },
+	}).then((res) => res.data).catch((err: AxiosError<WebReturnType<string>>) => err.response?.data);
+
+	if (!encryptedText) throw new Response(null, { status: 404, statusText: 'Not Found 1.' });
+	else if ('error' in encryptedText) throw new Response(null, { status: 404, statusText: Array.isArray(encryptedText.error) ? encryptedText.error.join('. ') : encryptedText.error });
+
+	localStorage.setItem('recent', encryptedText.data);
 }
 
 export function time(number: number, from: TimeUnits = 's', to: TimeUnits = 'ms'): number {

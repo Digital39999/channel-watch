@@ -1,15 +1,15 @@
-import { z } from 'zod';
 import { parseZodError } from '~/other/utils';
+import { z } from 'zod';
 
 const config = {
-	sessionSecret: process.env.SESSION_SECRET!,
+	encryption: process.env.ENCRYPTION_KEY,
 };
 
 const ConfigSchema = z.object({
-	sessionSecret: z.string().optional(),
+	encryption: z.string(),
 });
 
 const validatedConfig = ConfigSchema.safeParse(config);
 if (!validatedConfig.success) throw new Error(JSON.stringify(parseZodError(validatedConfig.error), null, 5));
 
-export default config;
+export default validatedConfig.data;

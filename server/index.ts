@@ -6,7 +6,7 @@ import { time } from '~/other/utils';
 import { config } from 'dotenv';
 import express from 'express';
 
-config({ path: '../.env' });
+config();
 
 const isProd = process.env.NODE_ENV === 'production';
 const app = express().disable('x-powered-by');
@@ -42,7 +42,7 @@ app.use('/api/discord', createProxyMiddleware({
 	secure: true,
 	pathRewrite: { '^/api/discord': '' },
 	headers: {
-		'User-Agent': 'DiscordBot (https://hono.app, 1.0)',
+		'User-Agent': 'DiscordBot (https://example.app, 1.0)',
 	},
 }));
 
@@ -66,4 +66,3 @@ function cache(seconds: number) {
 		next();
 	};
 }
-

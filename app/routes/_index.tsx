@@ -16,8 +16,8 @@ import { FiLogIn, FiLogOut } from 'react-icons/fi';
 import { useRootData } from '~/hooks/useRootData';
 import { WebReturnType } from '~/other/types';
 import { IoMdRefresh } from 'react-icons/io';
-import { redirect, typedjson } from 'remix-typedjson';
-import { useState } from 'react';
+import { typedjson } from 'remix-typedjson';
+import { useCallback, useState } from 'react';
 import axios from 'axios';
 
 const clientAction = async ({ request }: ClientActionFunctionArgs) => {
@@ -188,10 +188,8 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 		}
 	}
 
-	const cookie = await updateRecent(recentsData);
-	if (!cookie) return typedjson({ status: 500, error: 'Unable to update cookie.' });
-
-	return redirect('/');
+	await updateRecent(recentsData);
+	return typedjson({ status: 200, data: 'Success.' });
 };
 
 clientAction.hydrate = true;
@@ -210,12 +208,21 @@ export default function Index() {
 	const { current, recentData } = useRootData();
 
 	const [currentToken, setCurrentToken] = useState<string | null>(null);
-	const [isBot, setIsBot] = useState(false);
+	const [isBot, setIsBot] = useState(true);
 
+	const [currentlySubmitting, setCurrentlySubmitting] = useState('');
 	const fetcher = useFetcher<WebReturnType<string>>();
 	const toast = useToast();
 
-	useFetcherResponse(fetcher, toast, () => setModalOpen(false));
+	useFetcherResponse(fetcher, toast, () => {
+		setCurrentlySubmitting('');
+		setModalOpen(false);
+	});
+
+	const submitRequest = useCallback((type: string, data: Record<string, string | boolean>, options?: Record<string, string>) => {
+		setCurrentlySubmitting(type);
+		fetcher.submit(data, options);
+	}, [fetcher]);
 
 	return (
 		<VStack w='100%' align='center' px={4} spacing={{ base: 8, md: '30px' }} mt={{ base: 8, md: 16 }} id='a1'>
@@ -225,88 +232,98 @@ export default function Index() {
 					justifyContent={'space-between'}
 					alignItems={'center'}
 					borderRadius={8}
-					bg="alpha100"
+					bg='alpha100'
 					gap={2}
-					w="100%"
+					w='100%'
 					p={4}
 				>
 					{current?.info ? (
 						<>
 							<Text
-								fontSize="2xl"
-								fontWeight="bold"
-								color="alpha900"
-								w="100%"
+								fontSize='2xl'
+								fontWeight='bold'
+								color='alpha900'
+								w='100%'
 								textAlign={{ base: 'center', md: 'left' }}
 							>
 								You are logged in as {current.info.name}.
 							</Text>
 							<HStack>
-								<fetcher.Form method="post">
-									<VisuallyHiddenInput name="type" value="refresh" onChange={() => { }} />
+								<Tooltip label='Refresh user data.'>
+									<IconButton
+										size='lg'
+										aria-label='Refresh'
+										icon={<IoMdRefresh />}
+										fontSize={'2xl'}
+										isLoading={currentlySubmitting === 'refresh'}
+										onClick={() => {
+											submitRequest('refresh', {
+												type: 'refresh',
+											}, {
+												method: 'POST',
+											});
+										}}
+									/>
+								</Tooltip>
+								<VisuallyHiddenInput name='type' value='logout' onChange={() => { }} />
 
-									<Tooltip label="Refresh user data.">
-										<IconButton
-											size="lg"
-											aria-label="Refresh"
-											icon={<IoMdRefresh />}
-											type="submit"
-											fontSize={'2xl'}
-											isLoading={fetcher.state === 'submitting'}
-										/>
-									</Tooltip>
-								</fetcher.Form>
-								<fetcher.Form method="post">
-									<VisuallyHiddenInput name="type" value="logout" onChange={() => { }} />
-
-									<Tooltip label="Log out.">
-										<IconButton
-											size="lg"
-											aria-label="Log out"
-											fontSize={'2xl'}
-											icon={<FiLogOut />}
-											type="submit"
-										/>
-									</Tooltip>
-								</fetcher.Form>
+								<Tooltip label='Log out.'>
+									<IconButton
+										size='lg'
+										aria-label='Log out'
+										fontSize={'2xl'}
+										icon={<FiLogOut />}
+										isLoading={currentlySubmitting === 'logout'}
+										onClick={() => {
+											submitRequest('logout', {
+												type: 'logout',
+											}, {
+												method: 'POST',
+											});
+										}}
+									/>
+								</Tooltip>
 							</HStack>
 						</>
 					) : (
 						<>
-							<VisuallyHiddenInput name="type" value="login" onChange={() => { }} />
-							<VisuallyHiddenInput name="isBot" value={isBot ? 'true' : 'false'} onChange={() => { }} />
+							<VisuallyHiddenInput name='type' value='login' onChange={() => { }} />
+							<VisuallyHiddenInput name='isBot' value={isBot ? 'true' : 'false'} onChange={() => { }} />
 
 							<Input
-								name="token"
+								name='token'
 								placeholder={`Log in with a ${isBot ? 'bot' : 'user'} token to see your recent channels.`}
 								onChange={(e) => setCurrentToken(e.target.value)}
-								variant="filled"
-								size="lg"
-								w="100%"
+								variant='filled'
+								size='lg'
+								w='100%'
 							/>
 							<Tooltip label={isBot ? 'Currently logging in as a bot.' : 'Currently logging in as a user.'}>
 								<IconButton
-									size="lg"
-									aria-label="Is Bot"
+									size='lg'
+									aria-label='Is Bot'
 									icon={isBot ? <FaRobot /> : <FaUser />}
 									colorScheme={isBot ? 'green' : undefined}
 									onClick={() => setIsBot((prev) => !prev)}
 								/>
 							</Tooltip>
-							<Tooltip label="Log in.">
+							<Tooltip label='Log in.'>
 								<IconButton
-									size="lg"
-									aria-label="Log in"
+									size='lg'
+									aria-label='Log in'
 									icon={<FiLogIn />}
 									fontSize={'2xl'}
 									isDisabled={!currentToken}
-									onClick={() => fetcher.submit({
-										type: 'login',
-										isBot,
-										token: currentToken,
-									}, {
-										method: 'POST',
-									})}
+									isLoading={currentlySubmitting === 'login'}
+									onClick={() => {
+										submitRequest('login', {
+											type: 'login',
+											isBot,
+											token: currentToken || '',
+										}, {
+											method: 'POST',
+										});
+									}}
 								/>
 							</Tooltip>
 						</>
@@ -319,21 +336,21 @@ export default function Index() {
 					<Flex
 						flexDir='column'
 						justifyContent='space-between'
-						alignItems="center"
+						alignItems='center'
 						borderRadius={8}
-						bg="alpha100"
-						w="100%"
+						bg='alpha100'
+						w='100%'
 						p={4}
 					>
 						<Flex
 							justifyContent={{ base: 'center', md: 'space-between' }}
-							alignItems="center"
-							w="100%"
+							alignItems='center'
+							w='100%'
 						>
 							<Text
-								fontSize="2xl"
-								fontWeight="bold"
-								color="alpha900"
+								fontSize='2xl'
+								fontWeight='bold'
+								color='alpha900'
 							>
 								Recent Channels
 							</Text>
@@ -347,49 +364,54 @@ export default function Index() {
 
 						<Divider my={4} />
 
-						<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={2} w="100%">
+						<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={2} w='100%'>
 							{current.channels?.length ? current.channels?.map((channel) => (
 								<Flex
 									key={channel.id}
 									_hover={{ bg: 'alpha300' }}
-									justifyContent="space-between"
+									justifyContent='space-between'
 									transition={'all 0.2s'}
-									alignItems="center"
+									alignItems='center'
 									borderRadius={8}
-									flexDir="row"
-									bg="alpha200"
+									flexDir='row'
+									bg='alpha200'
 									p={4}
 								>
-									<Text fontSize="xl" color="alpha900">
+									<Text fontSize='xl' color='alpha900'>
 										{(channel.name?.length || 0) > 20 ? `${channel.name?.slice(0, 20)}..` : channel.name}
 									</Text>
 
 									<HStack>
-										<Tooltip label="Delete channel.">
+										<Tooltip label='Delete channel.'>
 											<IconButton
-												aria-label="Delete"
+												aria-label='Delete'
 												icon={<FaTrash />}
-												onClick={() => fetcher.submit({
-													type: 'deleteChannel',
-													channelId: channel.id,
-												}, {
-													method: 'POST',
-												})}
+												isLoading={currentlySubmitting === 'deleteChannel'}
+												onClick={() => {
+													submitRequest('deleteChannel', {
+														type: 'deleteChannel',
+														channelId: channel.id,
+													}, {
+														method: 'POST',
+													});
+												}}
 											/>
 										</Tooltip>
 
 										<Link to={`/channels/${channel.id}`}>
-											<Tooltip label="Open channel.">
+											<Tooltip label='Open channel.'>
 												<IconButton
-													aria-label="Open"
+													aria-label='Open'
 													icon={<FiLogIn />}
+													isLoading={currentlySubmitting === 'openChannel'}
+													onClick={() => setCurrentlySubmitting('openChannel')}
 												/>
 											</Tooltip>
 										</Link>
 									</HStack>
 								</Flex>
 							)) : (
-								<Text fontSize="xl" color="alpha900">
+								<Text fontSize='xl' color='alpha900'>
 									No channels found.
 								</Text>
 							)}
@@ -399,21 +421,21 @@ export default function Index() {
 					<Flex
 						flexDir='column'
 						justifyContent='space-between'
-						alignItems="center"
+						alignItems='center'
 						borderRadius={8}
-						bg="alpha100"
-						w="100%"
+						bg='alpha100'
+						w='100%'
 						p={4}
 					>
 						<Flex
 							justifyContent={{ base: 'center', md: 'space-between' }}
-							alignItems="center"
-							w="100%"
+							alignItems='center'
+							w='100%'
 						>
 							<Text
-								fontSize="2xl"
-								fontWeight="bold"
-								color="alpha900"
+								fontSize='2xl'
+								fontWeight='bold'
+								color='alpha900'
 							>
 								Recent Users
 							</Text>
@@ -421,54 +443,60 @@ export default function Index() {
 
 						<Divider my={4} />
 
-						<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={2} w="100%">
+						<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={2} w='100%'>
 							{recentData.all?.length ? recentData.all?.map((recent, index) => (
 								<Flex
 									key={index}
 									_hover={{ bg: 'alpha300' }}
-									justifyContent="space-between"
+									justifyContent='space-between'
 									transition={'all 0.2s'}
-									alignItems="center"
+									alignItems='center'
 									borderRadius={8}
-									flexDir="row"
-									bg="alpha200"
+									flexDir='row'
+									bg='alpha200'
 									p={4}
 								>
-									<Text fontSize="xl" color="alpha900">
+									<Text fontSize='xl' color='alpha900'>
 										{(recent.info?.name.length || 0) > 20 ? `${recent.info?.name.slice(0, 20)}..` : recent.info?.name}
 									</Text>
 
 									<HStack>
-										<Tooltip label="Delete user.">
+										<Tooltip label='Delete user.'>
 											<IconButton
-												aria-label="Delete"
+												aria-label='Delete'
 												icon={<FaTrash />}
-												onClick={() => fetcher.submit({
-													type: 'deleteUser',
-													token: recent.token || '',
-												}, {
-													method: 'POST',
-												})}
+												isLoading={currentlySubmitting === 'deleteUser'}
+												onClick={() => {
+													submitRequest('deleteUser', {
+														type: 'deleteUser',
+														token: recent.token || '',
+													}, {
+														method: 'POST',
+													});
+												}}
 											/>
 										</Tooltip>
 
-										<Tooltip label="Log in.">
+										<Tooltip label='Log in.'>
 											<IconButton
-												aria-label="Log in"
+												aria-label='Log in'
 												icon={<FiLogIn />}
-												onClick={() => fetcher.submit({
-													type: 'login',
-													isBot: recent.isBot || false,
-													token: recent.token || '',
-												}, {
-													method: 'POST',
-												})}
+												isLoading={currentlySubmitting === 'login'}
+												onClick={() => {
+													submitRequest('login', {
+														type: 'login',
+														isBot: recent.isBot || false,
+														token: recent.token || '',
+													}, {
+														method: 'POST',
+													});
+												}}
 											/>
 										</Tooltip>
 									</HStack>
 								</Flex>
 							)) : (
-								<Text fontSize="xl" color="alpha900">
+								<Text fontSize='xl' color='alpha900'>
 									No users found.
 								</Text>
 							)}
@@ -480,62 +508,75 @@ export default function Index() {
 			<NewChannelModal
 				isOpen={modalOpen}
 				onClose={() => setModalOpen(false)}
+				currently={currentlySubmitting}
 				fetcher={fetcher}
+				submit={(id) => {
+					submitRequest('checkChannel', {
+						type: 'checkChannel',
+						channel: id,
+					}, {
+						method: 'POST',
+					});
+				}}
 			/>
 		</VStack >
 	);
 }
 
 export function NewChannelModal({
-	isOpen, onClose, fetcher,
+	isOpen, onClose, fetcher, currently, submit,
 }: {
 	isOpen: boolean;
 	onClose: () => void;
 	fetcher: ReturnType<typeof useFetcher>;
+	currently: string;
+	submit: (id: string) => void;
 }) {
+	const [channel, setChannel] = useState<string>('');
+
 	return (
 		<Modal isOpen={isOpen} onClose={onClose} size='lg' isCentered>
 			<ModalOverlay />
 			<ModalContent bg={useColorMode().colorMode === 'light' ? 'white' : 'brand900'} mx={2}>
-				<fetcher.Form method={'post'}>
-					<ModalHeader>
-						New Channel
-					</ModalHeader>
-					<ModalCloseButton />
-					<ModalBody>
-						<Flex
-							flexDir='column'
-							flexWrap='wrap'
-							gap={4}
-						>
-							<VisuallyHiddenInput name='type' value='checkChannel' onChange={() => { }} />
+				<ModalHeader>
+					New Channel
+				</ModalHeader>
+				<ModalCloseButton />
+				<ModalBody>
+					<Flex
+						flexDir='column'
+						flexWrap='wrap'
+						gap={4}
+					>
+						<VisuallyHiddenInput name='type' value='checkChannel' onChange={() => { }} />
 
-							<Box flex={1}>
-								<Input
-									name='channel'
-									placeholder='Channel ID'
-									variant='filled'
-									size='lg'
-								/>
-							</Box>
-						</Flex>
-					</ModalBody>
-					<ModalFooter display={'flex'} gap={1}>
-						<Button
-							colorScheme='gray'
-							onClick={onClose}
-						>
-							Cancel
-						</Button>
-						<Button
-							isLoading={fetcher.state === 'loading'}
-							colorScheme='green'
-							type='submit'
-						>
-							Confrim
-						</Button>
-					</ModalFooter>
-				</fetcher.Form>
+						<Box flex={1}>
+							<Input
+								name='channel'
+								placeholder='Channel ID'
+								onChange={(e) => setChannel(e.target.value)}
+								variant='filled'
+								size='lg'
+							/>
+						</Box>
+					</Flex>
+				</ModalBody>
+				<ModalFooter display={'flex'} gap={1}>
+					<Button
+						colorScheme='gray'
+						onClick={onClose}
+					>
+						Cancel
+					</Button>
+					<Button
+						isLoading={(fetcher.state === 'loading' || fetcher.state === 'submitting') && currently === 'checkChannel'}
+						onClick={() => submit(channel)}
+						isDisabled={!channel}
+						colorScheme='green'
+					>
+						Confrim
+					</Button>
+				</ModalFooter>
 			</ModalContent>
 		</Modal>
 	);

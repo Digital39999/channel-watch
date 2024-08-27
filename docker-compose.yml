@@ -5,3 +5,5 @@ services:
     image: ghcr.io/digital39999/channel-watch:latest
     ports:
       - "3000:3000"
+    environment:
+      ENCRYPTION_KEY: "my-secret"

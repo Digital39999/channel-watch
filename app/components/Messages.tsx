@@ -41,7 +41,7 @@ export type Mentions = {
 	channels: Map<string, APIChannel>;
 };
 
-export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]; guild: Guild; loggedIn?: string; }) {
+export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]; guild: Guild | null; loggedIn?: string; }) {
 	const [highlighted, setHighlighted] = useState<string | null>(null);
 	const { colorMode } = useColorMode();
 
@@ -66,23 +66,23 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 
 	const allRoles = useMemo(() => {
 		const roles = new Map<string, APIRole>();
-		for (const role of guild.roles) {
+		for (const role of guild?.roles || []) {
 			roles.set(role.id, role);
 		}
 
 		return roles;
-	}, [guild.roles]);
+	}, [guild?.roles]);
 
 	const getRole = useCallback((id: string) => allRoles.get(id), [allRoles]);
 
 	const allChannels = useMemo(() => {
 		const channels = new Map<string, Channel>();
-		for (const channel of guild.channels) {
+		for (const channel of guild?.channels || []) {
 			channels.set(channel.id, channel);
 		}
 
 		return channels;
-	}, [guild.channels]);
+	}, [guild?.channels]);
 
 	const getChannel = useCallback((id: string) => allChannels.get(id), [allChannels]);
 
@@ -441,7 +441,7 @@ export function SingleMessage({
 	);
 }
 
-export function SystemMessage({ message, guild, key }: { message: APIMessage; guild: Guild; key: string; }) {
+export function SystemMessage({ message, guild, key }: { message: APIMessage; guild: Guild | null; key: string; }) {
 	type Type = 'thread' | 'join' | 'alert' | 'error' | 'boost' | 'call' | 'edit' | 'leave' | 'missed-call' | 'pin' | 'upgrade';
 
 	const { colorMode } = useColorMode();
@@ -533,9 +533,9 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 		case MessageType.ChannelPinnedMessage: return getSystemMessage(message, 'pin', `<i>${message.author?.username}</i> pinned <i>a message</i> to this channel. See all <i>pinned messages</i>.`);
 		case MessageType.UserJoin: return getSystemMessage(message, 'join', getWelcomeMessage(`<i>${message.author?.username}</i>`, message.timestamp));
 		case MessageType.GuildBoost: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server!`);
-		case MessageType.GuildBoostTier1: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server! ${guild.name} has achieved **Level 1**!`);
-		case MessageType.GuildBoostTier2: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server! ${guild.name} has achieved **Level 2**!`);
-		case MessageType.GuildBoostTier3: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server! ${guild.name} has achieved **Level 3**!`);
+		case MessageType.GuildBoostTier1: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server! ${guild?.name || 'unknown server'} has achieved **Level 1**!`);
+		case MessageType.GuildBoostTier2: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server! ${guild?.name || 'unknown server'} has achieved **Level 2**!`);
+		case MessageType.GuildBoostTier3: return getSystemMessage(message, 'boost', `<i>${message.author?.username}</i> just boosted the server! ${guild?.name || 'unknown server'} has achieved **Level 3**!`);
 		case MessageType.ChannelFollowAdd: return getSystemMessage(message, 'edit', `<i>${message.author?.username}</i> has added <i>${message.content}</i> to the channel. Its most important updates will show up here.`);
 		case MessageType.GuildDiscoveryDisqualified: return getSystemMessage(message, 'error', 'This server has been removed from Server Discovery because it no longer passes all the requirements. Check Server settings for more details.');
 		case MessageType.GuildDiscoveryRequalified: return getSystemMessage(message, 'boost', 'This server has been requalified for Server Discovery. Check Server settings for more details.');
@@ -549,8 +549,8 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 		case MessageType.ContextMenuCommand: return null;
 		case MessageType.AutoModerationAction: return getNotSupportedMessage(message.type);
 		case MessageType.RoleSubscriptionPurchase: {
-			if (message.role_subscription_data?.is_renewal) return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> renewed ${message.role_subscription_data?.tier_name} and has been subscriber of ${guild.name} for ${message.role_subscription_data.total_months_subscribed} month${message.role_subscription_data.total_months_subscribed === 1 ? '' : 's'}.`);
-			else return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> joined ${message.role_subscription_data?.tier_name} and has been subscriber of ${guild.name} for ${message.role_subscription_data?.total_months_subscribed || 1} month${message.role_subscription_data?.total_months_subscribed === 1 ? '' : 's'}.`);
+			if (message.role_subscription_data?.is_renewal) return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> renewed ${message.role_subscription_data?.tier_name} and has been subscriber of ${guild?.name || 'unknown server'} for ${message.role_subscription_data.total_months_subscribed} month${message.role_subscription_data.total_months_subscribed === 1 ? '' : 's'}.`);
+			else return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> joined ${message.role_subscription_data?.tier_name} and has been subscriber of ${guild?.name || 'unknown server'} for ${message.role_subscription_data?.total_months_subscribed || 1} month${message.role_subscription_data?.total_months_subscribed === 1 ? '' : 's'}.`);
 		}
 		case MessageType.InteractionPremiumUpsell: return getNotSupportedMessage(message.type);
 		case MessageType.StageStart: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> started ${message.content}.`);
@@ -558,7 +558,7 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 		case MessageType.StageSpeaker: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> is now a speaker.`);
 		case MessageType.StageRaiseHand: return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> requested to speak.`);
 		case MessageType.StageTopic: return getSystemMessage(message, 'edit', `<i>${message.author?.username}</i> changed the Stage topic: ${message.content}.`);
-		case MessageType.GuildApplicationPremiumSubscription: return getSystemMessage(message, 'upgrade', `<i>${message.author?.username}</i> upgraded ${guild.name} to premium for this server! 🎉`);
+		case MessageType.GuildApplicationPremiumSubscription: return getSystemMessage(message, 'upgrade', `<i>${message.author?.username}</i> upgraded ${guild?.name || 'unknown server'} to premium for this server! 🎉`);
 		case MessageType.GuildIncidentAlertModeEnabled: return getNotSupportedMessage(message.type);
 		case MessageType.GuildIncidentAlertModeDisabled: return getNotSupportedMessage(message.type);
 		case MessageType.GuildIncidentReportRaid: return getNotSupportedMessage(message.type);

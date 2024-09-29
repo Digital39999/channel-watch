@@ -132,9 +132,8 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 
 			if (!data) return typedjson({ status: 401, error: 'Invalid channel.' });
 			else if ('message' in data) return typedjson({ status: 401, error: data.message + '.' });
-			else if (!('guild_id' in data)) return typedjson({ status: 401, error: 'Invalid channel.' });
 
-			const allowedTypes = [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildVoice];
+			const allowedTypes = [ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildVoice, ChannelType.DM, ChannelType.GroupDM];
 			if (!allowedTypes.includes(data.type)) return typedjson({ status: 403, error: 'Invalid channel type, only text, announcement, and voice channels are allowed.' });
 
 			const latestMessage = await axios({
@@ -155,7 +154,7 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				current.channels.push({
 					id: data.id,
 					name: data.name,
-					guildId: data.guild_id!,
+					guildId: 'guild_id' in data ? data.guild_id : undefined,
 				});
 			} else {
 				exists.name = data.name;

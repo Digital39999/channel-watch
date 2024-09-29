@@ -67,7 +67,7 @@ const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs) => {
 	const channelData = current.channels?.find((channel) => channel.id === channelId);
 	if (!channelData) throw new Response(null, { status: 403, statusText: 'This channel is not accessible.' });
 
-	const guildData = before ? null : await getGuild({ guildId: channelData.guildId, current: { isBot: current.isBot || false, token: current.token } });
+	const guildData = before ? null : channelData.guildId ? await getGuild({ guildId: channelData.guildId, current: { isBot: current.isBot || false, token: current.token } }) : null;
 	const messageData = await getMessages({ channelId, before, current: { isBot: current.isBot || false, token: current.token } });
 
 	return typedjson({
@@ -187,7 +187,7 @@ export default function Channels() {
 					ref={scrollContainerRef}
 				>
 					<Messages
-						guild={guild!}
+						guild={guild}
 						messages={messages}
 						loggedIn={current?.info?.id}
 					/>

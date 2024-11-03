@@ -1,12 +1,4 @@
-import {
-	Flex, VStack, SimpleGrid, HStack, Box, Input, Text,
-	Divider, IconButton, Tooltip, Modal, ModalOverlay,
-	ModalContent, ModalHeader, ModalFooter, ModalBody,
-	ModalCloseButton, Button, VisuallyHiddenInput,
-	useToast, useColorMode,
-	AbsoluteCenter,
-	Spinner,
-} from '@chakra-ui/react';
+import { Flex, VStack, SimpleGrid, HStack, Box, Input, Text, Divider, IconButton, Tooltip, Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Button, useToast, useColorMode, AbsoluteCenter, Spinner } from '@chakra-ui/react';
 import { APIChannel, APIUser, ChannelType, APIMessage } from 'discord-api-types/v10';
 import { ClientActionFunctionArgs, Link, useFetcher } from '@remix-run/react';
 import { FaFolderPlus, FaRobot, FaTrash, FaUser } from 'react-icons/fa';
@@ -15,9 +7,9 @@ import { getRecent, updateRecent } from '~/other/utils';
 import { FiLogIn, FiLogOut } from 'react-icons/fi';
 import { useRootData } from '~/hooks/useRootData';
 import { WebReturnType } from '~/other/types';
+import { useCallback, useState } from 'react';
 import { IoMdRefresh } from 'react-icons/io';
 import { typedjson } from 'remix-typedjson';
-import { useCallback, useState } from 'react';
 import axios from 'axios';
 
 const clientAction = async ({ request }: ClientActionFunctionArgs) => {
@@ -202,6 +194,8 @@ export function HydrateFallback() {
 	);
 }
 
+export type SubmitType = 'login' | 'logout' | 'refresh' | 'checkChannel' | 'deleteChannel' | 'deleteUser' | 'openChannel';
+
 export default function Index() {
 	const [modalOpen, setModalOpen] = useState<boolean>(false);
 	const { current, recentData } = useRootData();
@@ -209,16 +203,18 @@ export default function Index() {
 	const [currentToken, setCurrentToken] = useState<string | null>(null);
 	const [isBot, setIsBot] = useState(true);
 
-	const [currentlySubmitting, setCurrentlySubmitting] = useState('');
+	const [currentlySubmitting, setCurrentlySubmitting] = useState<SubmitType | null>(null);
 	const fetcher = useFetcher<WebReturnType<string>>();
 	const toast = useToast();
 
-	useFetcherResponse(fetcher, toast, () => {
-		setCurrentlySubmitting('');
-		setModalOpen(false);
+	useFetcherResponse(fetcher, toast, {
+		onFinish: () => {
+			setCurrentlySubmitting(null);
+			setModalOpen(false);
+		},
 	});
 
-	const submitRequest = useCallback((type: string, data: Record<string, string | boolean>, options?: Record<string, string>) => {
+	const submitRequest = useCallback((type: SubmitType, data: Record<string, string | boolean>, options?: Record<string, string>) => {
 		setCurrentlySubmitting(type);
 		fetcher.submit(data, options);
 	}, [fetcher]);
@@ -264,7 +260,6 @@ export default function Index() {
 										}}
 									/>
 								</Tooltip>
-								<VisuallyHiddenInput name='type' value='logout' onChange={() => { }} />
 
 								<Tooltip label='Log out.'>
 									<IconButton
@@ -286,9 +281,6 @@ export default function Index() {
 						</>
 					) : (
 						<>
-							<VisuallyHiddenInput name='type' value='login' onChange={() => { }} />
-							<VisuallyHiddenInput name='isBot' value={isBot ? 'true' : 'false'} onChange={() => { }} />
-
 							<Input
 								name='token'
 								placeholder={`Log in with a ${isBot ? 'bot' : 'user'} token to see your recent channels.`}
@@ -528,7 +520,7 @@ export function NewChannelModal({
 	isOpen: boolean;
 	onClose: () => void;
 	fetcher: ReturnType<typeof useFetcher>;
-	currently: string;
+	currently: SubmitType | null;
 	submit: (id: string) => void;
 }) {
 	const [channel, setChannel] = useState<string>('');
@@ -547,8 +539,6 @@ export function NewChannelModal({
 						flexWrap='wrap'
 						gap={4}
 					>
-						<VisuallyHiddenInput name='type' value='checkChannel' onChange={() => { }} />
-
 						<Box flex={1}>
 							<Input
 								name='channel'

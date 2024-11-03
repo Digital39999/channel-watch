@@ -6,7 +6,11 @@ import { useEffect } from 'react';
 export default function useFetcherResponse(
 	fetcher: FetcherWithComponents<WebReturnType<string>>,
 	toast: CreateToastFnReturn,
-	onSuccess?: (data: { status: 200; data: string; }) => void,
+	hooks: {
+		onSuccess?: (data: { status: 200; data: string; }) => void,
+		onFinish?: () => void,
+		onError?: () => void,
+	},
 ) {
 	useEffect(() => {
 		if (fetcher?.data) {
@@ -21,7 +25,9 @@ export default function useFetcherResponse(
 				isClosable: true,
 			});
 
-			if (fetcher.data.status === 200 && onSuccess) onSuccess(fetcher.data);
+			if (fetcher.data.status === 200 && hooks.onSuccess) hooks.onSuccess(fetcher.data);
+			if (fetcher.data.status !== 200 && hooks.onError) hooks.onError();
+			if (hooks.onFinish) hooks.onFinish();
 		}
 	}, [fetcher.data]); // eslint-disable-line
 }

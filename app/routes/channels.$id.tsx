@@ -102,10 +102,9 @@ export default function Channels() {
 	const fetcher = useFetcher<{ messages: APIMessage[] }>();
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-	const lastMessageId = useMemo(() => messages.length > 0 ? messages[messages.length - 1]?.id : null, [messages]);
+	const lastMessageId = useMemo(() => messages.length > 0 ? messages[0]?.id : null, [messages]);
 
 	useEffect(() => {
-		console.log('setting new messages', fetcher.data?.messages.length);
 		if (fetcher.data?.messages.length) {
 			setMessages((prev) => [
 				...(fetcher.data?.messages as APIMessage[]),
@@ -113,6 +112,11 @@ export default function Channels() {
 			]);
 		}
 	}, [fetcher.data]);
+
+	useEffect(() => {
+		if (fetcher.data?.messages.length) console.log(`[Channels] Fetched ${fetcher.data?.messages.length} messages, total: ${messages.length}, last: ${lastMessageId}.`);
+		else console.log(`[Channels] Messages updated, total: ${messages.length}, last: ${lastMessageId}.`);
+	}, [fetcher.data, messages, lastMessageId]);
 
 	const loadNext = useCallback(() => {
 		if (!lastMessageId || fetcher.state === 'loading' || fetcher.state === 'submitting') return;

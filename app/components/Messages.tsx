@@ -1,27 +1,4 @@
-import {
-	DiscordActionRow,
-	DiscordAttachments,
-	DiscordAudioAttachment,
-	DiscordButton,
-	DiscordCommand,
-	DiscordEmbed,
-	DiscordEmbedDescription,
-	DiscordEmbedField,
-	DiscordEmbedFields,
-	DiscordEmbedFooter,
-	DiscordFileAttachment,
-	DiscordImageAttachment,
-	DiscordMessage,
-	DiscordMessages,
-	DiscordReaction,
-	DiscordReactions,
-	DiscordReply,
-	DiscordStringSelectMenu,
-	DiscordStringSelectMenuOption,
-	DiscordSystemMessage,
-	DiscordThread,
-	DiscordVideoAttachment,
-} from '@skyra/discord-components-react';
+import { DiscordActionRow, DiscordAttachments, DiscordAudioAttachment, DiscordButton, DiscordCommand, DiscordEmbed, DiscordEmbedDescription, DiscordEmbedField, DiscordEmbedFields, DiscordEmbedFooter, DiscordFileAttachment, DiscordImageAttachment, DiscordMessage, DiscordMessages, DiscordReaction, DiscordReactions, DiscordReply, DiscordStringSelectMenu, DiscordStringSelectMenuOption, DiscordSystemMessage, DiscordThread, DiscordVideoAttachment } from '@skyra/discord-components-react';
 import { APIChannel, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType } from 'discord-api-types/v10';
 import { useCallback, useMemo, useState } from 'react';
 import { Text, useColorMode } from '@chakra-ui/react';
@@ -200,7 +177,7 @@ export function SingleMessage({
 		<DiscordMessage
 			verified
 			id={message.id}
-			author={message.author?.username}
+			author={message.author?.username + ` (${message.id})`}
 			avatar={message.author?.avatar ? `https://cdn.discordapp.com/avatars/${message.author.id}/${message.author.avatar}.${message.author.avatar.startsWith('a_') ? 'gif' : 'png'}` : undefined}
 			highlight={message.content.includes('@everyone') || message.content.includes('@here') || message.mentions.some((mention) => mention.id === loggedIn)}
 			edited={message.edited_timestamp !== null}
@@ -237,7 +214,7 @@ export function SingleMessage({
 					{parseText(message.referenced_message.content, {
 						...refMentions,
 						channels: allChannels,
-					}, false)}
+					}, false, true)}
 				</DiscordReply>
 			)}
 
@@ -568,12 +545,13 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 	}
 }
 
-export function parseText(content: string, mentions: Mentions, inEmbed: boolean) {
+export function parseText(content: string, mentions: Mentions, inEmbed: boolean, onlyFirst?: boolean) {
 	const onlyEmojiMessage = isMessageOnlyEmojis(content);
 
-	const parsedMentions = parseMentionsContent(content, mentions, inEmbed, onlyEmojiMessage);
-	const parsedMarkdown = parseMarkdown(parsedMentions, inEmbed);
+	let parsedMentions = parseMentionsContent(content, mentions, inEmbed, onlyEmojiMessage);
+	if (onlyFirst) parsedMentions = parsedMentions.split('\n')[0];
 
+	const parsedMarkdown = parseMarkdown(parsedMentions, inEmbed);
 	return <Text as={'span'} dangerouslySetInnerHTML={{ __html: parsedMarkdown || '' }} />;
 }
 

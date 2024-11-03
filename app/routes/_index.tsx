@@ -135,17 +135,26 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 				},
 			}).then((res) => res.data).catch((err) => err.response?.data) as APIMessage[] | { message: string; };
-			if (!latestMessage) return typedjson({ status: 401, error: 'Invalid channel.' });
+			if (!latestMessage) return typedjson({ status: 401, error: 'Couldn\'t get channel messages.' });
 			else if ('message' in latestMessage) return typedjson({ status: 403, error: latestMessage.message + '.' });
-			else if (!Array.isArray(latestMessage) || latestMessage.length === 0) return typedjson({ status: 403, error: 'Channel has no messages.' });
 
 			current.channels = current.channels || [];
+
+			let channelName: string | null = null;
+			switch (data.type) {
+				case ChannelType.GuildText: case ChannelType.GuildAnnouncement: case ChannelType.GuildVoice: case ChannelType.GroupDM: channelName = data.name; break;
+				case ChannelType.DM: {
+					const recipient = data.recipients?.find((x) => x.id !== current.info?.id);
+					if (recipient) channelName = `@${recipient.username}`;
+					break;
+				}
+			}
 
 			const exists = current.channels.find((x) => x.id === data.id);
 			if (!exists) {
 				current.channels.push({
 					id: data.id,
-					name: data.name,
+					name: channelName,
 					guildId: 'guild_id' in data ? data.guild_id : undefined,
 				});
 			} else {
@@ -204,12 +213,14 @@ export default function Index() {
 	const [isBot, setIsBot] = useState(true);
 
 	const [currentlySubmitting, setCurrentlySubmitting] = useState<SubmitType | null>(null);
+	const [currentlyId, setCurrentlyId] = useState<string | null>(null);
 	const fetcher = useFetcher<WebReturnType<string>>();
 	const toast = useToast();
 
 	useFetcherResponse(fetcher, toast, {
 		onFinish: () => {
 			setCurrentlySubmitting(null);
+			setCurrentlyId(null);
 			setModalOpen(false);
 		},
 	});
@@ -377,8 +388,13 @@ export default function Index() {
 											<IconButton
 												aria-label='Delete'
 												icon={<FaTrash />}
-												isLoading={currentlySubmitting === 'deleteChannel'}
+												isLoading={currentlySubmitting === 'deleteChannel' && currentlyId === channel.id}
+												isDisabled={
+													(currentlySubmitting === 'deleteChannel' && currentlyId !== channel.id) ||
+													(currentlySubmitting === 'openChannel')
+												}
 												onClick={() => {
+													setCurrentlyId(channel.id);
 													submitRequest('deleteChannel', {
 														type: 'deleteChannel',
 														channelId: channel.id,
@@ -394,8 +410,15 @@ export default function Index() {
 												<IconButton
 													aria-label='Open'
 													icon={<FiLogIn />}
-													isLoading={currentlySubmitting === 'openChannel'}
-													onClick={() => setCurrentlySubmitting('openChannel')}
+													isLoading={currentlySubmitting === 'openChannel' && currentlyId === channel.id}
+													isDisabled={
+														(currentlySubmitting === 'openChannel' && currentlyId !== channel.id) ||
+														(currentlySubmitting === 'deleteChannel')
+													}
+													onClick={() => {
+														setCurrentlySubmitting('openChannel');
+														setCurrentlyId(channel.id);
+													}}
 												/>
 											</Tooltip>
 										</Link>

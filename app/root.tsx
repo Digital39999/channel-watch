@@ -5,12 +5,11 @@ import { LinksFunction, MetaFunction } from '@remix-run/node';
 import { cssBundleHref } from '@remix-run/css-bundle';
 import InfoComponent from '~/components/Info';
 import theme from '~/components/theme/base';
+import { getRecent } from './other/utils';
 import Layout from '~/components/Layout';
 import { Recents } from './other/types';
 import { Document } from '~/document';
-
 import '~/styles/global.css';
-import { getRecent } from './other/utils';
 
 export const links: LinksFunction = () => [
 	...(cssBundleHref ? [{ rel: 'stylesheet', href: cssBundleHref }] : []),
@@ -35,7 +34,7 @@ export const meta: MetaFunction = () => {
 	];
 };
 
-const clientLoader = async () => {
+export const clientLoader = async () => {
 	const data = await getRecent() || { currentIndex: -1, all: [] } as Recents;
 
 	return typedjson({
@@ -44,9 +43,6 @@ const clientLoader = async () => {
 		recentData: data,
 	});
 };
-
-clientLoader.hydrate = true;
-export { clientLoader };
 
 export function HydrateFallback() {
 	return (

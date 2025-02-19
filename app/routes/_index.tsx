@@ -1,18 +1,18 @@
 import { Flex, VStack, SimpleGrid, HStack, Box, Input, Text, Divider, IconButton, Tooltip, Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Button, useToast, useColorMode, AbsoluteCenter, Spinner } from '@chakra-ui/react';
-import { APIChannel, APIUser, ChannelType, APIMessage } from 'discord-api-types/v10';
+import { APIChannel, APIUser, ChannelType, APIMessage, APIGroupDMChannel, APIDMChannel } from 'discord-api-types/v10';
+import { FaFolderPlus, FaRobot, FaTrash, FaUser, FaUserFriends } from 'react-icons/fa';
 import { ClientActionFunctionArgs, Link, useFetcher } from '@remix-run/react';
-import { FaFolderPlus, FaRobot, FaTrash, FaUser } from 'react-icons/fa';
 import useFetcherResponse from '~/hooks/useFetcherResponse';
 import { getRecent, updateRecent } from '~/other/utils';
+import { Fragment, useCallback, useState } from 'react';
 import { FiLogIn, FiLogOut } from 'react-icons/fi';
 import { useRootData } from '~/hooks/useRootData';
 import { WebReturnType } from '~/other/types';
-import { useCallback, useState } from 'react';
 import { IoMdRefresh } from 'react-icons/io';
 import { typedjson } from 'remix-typedjson';
 import axios from 'axios';
 
-const clientAction = async ({ request }: ClientActionFunctionArgs) => {
+export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 	const formData = await request.formData();
 	const type = formData.get('type') as string;
 
@@ -159,7 +159,49 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				});
 			} else {
 				exists.name = data.name;
+				current.channels = current.channels.map((x) => x.id === data.id ? exists : x);
 			}
+
+			break;
+		}
+		case 'getDMs': {
+			const currentIndex = recentsData.currentIndex;
+			if (typeof currentIndex !== 'number' || currentIndex < 0) return typedjson({ status: 400, error: 'Invalid request.' });
+
+			const current = recentsData.all?.[currentIndex];
+			if (!current) return typedjson({ status: 400, error: 'Invalid request.' });
+
+			const data = await axios({
+				method: 'GET',
+				url: '/api/discord/v10/users/@me/channels',
+				headers: {
+					'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
+				},
+			}).then((res) => res.data).catch((err) => err.response?.data) as (APIDMChannel | APIGroupDMChannel)[] | { message: string; };
+
+			console.log(data);
+
+			if (!data) return typedjson({ status: 401, error: 'Invalid token.' });
+			else if ('message' in data) return typedjson({ status: 401, error: data.message + '.' });
+
+			const allowedTypes = [ChannelType.DM, ChannelType.GroupDM];
+			const channels = data.filter((x) => allowedTypes.includes(x.type));
+
+			const currentChannels = current.channels || [];
+			for (const channel of channels) {
+				const exists = currentChannels.find((x) => x.id === channel.id);
+				if (!exists) {
+					currentChannels.push({
+						id: channel.id,
+						name: channel.type === ChannelType.DM ? `@${channel.recipients?.find((x) => x.id !== current.info?.id)?.username}` : `Group: ${channel.recipients?.map((x) => x.username).join(', ')}`,
+					});
+				} else {
+					exists.name = channel.type === ChannelType.DM ? `@${channel.recipients?.find((x) => x.id !== current.info?.id)?.username}` : `Group: ${channel.recipients?.map((x) => x.username).join(', ')}`;
+					currentChannels.map((x) => x.id === channel.id ? exists : x);
+				}
+			}
+
+			current.channels = currentChannels;
 
 			break;
 		}
@@ -192,9 +234,6 @@ const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 	return typedjson({ status: 200, data: 'Success.' });
 };
 
-clientAction.hydrate = true;
-export { clientAction };
-
 export function HydrateFallback() {
 	return (
 		<AbsoluteCenter>
@@ -203,7 +242,7 @@ export function HydrateFallback() {
 	);
 }
 
-export type SubmitType = 'login' | 'logout' | 'refresh' | 'checkChannel' | 'deleteChannel' | 'deleteUser' | 'openChannel';
+export type SubmitType = 'login' | 'logout' | 'refresh' | 'checkChannel' | 'deleteChannel' | 'deleteUser' | 'openChannel' | 'getDMs';
 
 export default function Index() {
 	const [modalOpen, setModalOpen] = useState<boolean>(false);
@@ -232,7 +271,7 @@ export default function Index() {
 
 	return (
 		<VStack w='100%' align='center' px={4} spacing={{ base: 8, md: '30px' }} mt={{ base: 8, md: 16 }} id='a1'>
-			<Box maxWidth='1000px' width={{ base: '100%', sm: '90%', md: '80%', xl: '60%' }} id='a2'>
+			<Box maxWidth='1000px' width={{ base: '100%', sm: '90%', md: '80%', xl: '60%' }} id='a2' mb={16}>
 				<Flex
 					flexDir={{ base: 'column', md: 'row' }}
 					justifyContent={'space-between'}
@@ -356,12 +395,28 @@ export default function Index() {
 							>
 								Recent Channels
 							</Text>
-							<Button
-								rightIcon={<FaFolderPlus />}
-								onClick={() => setModalOpen(true)}
-							>
-								New Channel
-							</Button>
+							<Flex gap={2}>
+								<Button
+									rightIcon={<FaUserFriends />}
+									isDisabled={currentlySubmitting === 'getDMs'}
+									isLoading={currentlySubmitting === 'getDMs'}
+									onClick={() => {
+										submitRequest('getDMs', {
+											type: 'getDMs',
+										}, {
+											method: 'POST',
+										});
+									}}
+								>
+									Fetch DMs
+								</Button>
+								<Button
+									rightIcon={<FaFolderPlus />}
+									onClick={() => setModalOpen(true)}
+								>
+									New Channel
+								</Button>
+							</Flex>
 						</Flex>
 
 						<Divider my={4} />
@@ -533,7 +588,7 @@ export default function Index() {
 					});
 				}}
 			/>
-		</VStack >
+		</VStack>
 	);
 }
 

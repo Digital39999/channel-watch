@@ -51,21 +51,30 @@ async function getMessages({ channelId, before, current }: GetMessagesArgs) {
 	return messageData.reverse();
 }
 
-const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs) => {
+export const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs) => {
 	const url = new URL(request.url);
 	const before = url.searchParams.get('before') || undefined;
 
 	const recentsData = await getRecent();
 	if (!recentsData) throw new Response(null, { status: 404, statusText: 'Not Found.' });
 
-	const current = typeof recentsData.currentIndex === 'number' ? recentsData.all?.[recentsData.currentIndex] || null : null;
+	let current = typeof recentsData.currentIndex === 'number' ? recentsData.all?.[recentsData.currentIndex] || null : null;
 	if (!current?.token) throw new Response(null, { status: 401, statusText: 'Unable to get current user\'s data.' });
 
 	const channelId = params.id;
 	if (!channelId) throw new Response(null, { status: 400, statusText: 'Bad Request.' });
 
-	const channelData = current.channels?.find((channel) => channel.id === channelId);
-	if (!channelData) throw new Response(null, { status: 403, statusText: 'This channel is not accessible.' });
+	let channelData = current.channels?.find((channel) => channel.id === channelId);
+	if (!channelData) {
+		const isElsewhere = recentsData.all?.find((user) => user.channels?.find((channel) => channel.id === channelId));
+		if (!isElsewhere) throw new Response(null, { status: 403, statusText: 'This channel is not accessible.' });
+
+		channelData = isElsewhere.channels?.find((channel) => channel.id === channelId);
+		if (!channelData) throw new Response(null, { status: 404, statusText: 'Channel not found.' });
+
+		current = isElsewhere;
+		if (!current.token) throw new Response(null, { status: 401, statusText: 'Unable to get current user\'s data.' });
+	}
 
 	const guildData = before ? null : channelData.guildId ? await getGuild({ guildId: channelData.guildId, current: { isBot: current.isBot || false, token: current.token } }) : null;
 	const messageData = await getMessages({ channelId, before, current: { isBot: current.isBot || false, token: current.token } });
@@ -80,9 +89,6 @@ const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs) => {
 
 
 // Exports.
-
-clientLoader.hydrate = true;
-export { clientLoader };
 
 export function HydrateFallback() {
 	return (
@@ -136,7 +142,7 @@ export default function Channels() {
 
 	return (
 		<VStack w='100%' align='center' px={4} spacing={{ base: 8, md: '30px' }} mt={{ base: 8, md: 16 }} id='a1'>
-			<Box maxWidth='1000px' width={{ base: '100%', sm: '90%', md: '80%', xl: '60%' }} id='a2'>
+			<Box maxWidth='1000px' width={{ base: '100%', sm: '90%', md: '80%', xl: '60%' }} id='a2' mb={16}>
 				<Flex
 					flexDir={{ base: 'column', md: 'row' }}
 					justifyContent={'space-between'}

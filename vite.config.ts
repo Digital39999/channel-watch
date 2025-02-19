@@ -1,8 +1,8 @@
-import { expressDevServer } from 'remix-express-dev-server';
 import { chunkSplitPlugin } from 'vite-plugin-chunk-split';
 import { vitePlugin as remix } from '@remix-run/dev';
 import { installGlobals } from '@remix-run/node';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import devServer from '@hono/vite-dev-server';
 import { defineConfig } from 'vite';
 import { config } from 'dotenv';
 import esbuild from 'esbuild';
@@ -17,16 +17,21 @@ export default defineConfig({
 		warmup: {
 			clientFiles: [
 				'./app/entry.client.tsx',
-				'./app/root.tsx',
 				'./app/routes/**/*',
+				'./app/root.tsx',
 			],
 		},
+	},
+	define: {
+		'process.env': process.env,
 	},
 	plugins: [
 		chunkSplitPlugin(),
 		tsconfigPaths(),
-		expressDevServer({
+		devServer({
 			entry: 'server/index.ts',
+			injectClientScript: false,
+			exclude: [/^\/(app)\/.+/, /^\/@.+$/, /^\/node_modules\/.*/],
 		}),
 		remix({
 			ignoredRouteFiles: ['**/*.css'],
@@ -53,5 +58,8 @@ export default defineConfig({
 		alias: {
 			'~': '/app',
 		},
+	},
+	build: {
+		chunkSizeWarningLimit: 1700,
 	},
 });

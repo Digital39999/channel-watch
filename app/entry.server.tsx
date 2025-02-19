@@ -1,10 +1,10 @@
-import createEmotionServer from '@emotion/server/create-instance';
 import createEmotionCache from '~/context/createEmotionCache';
+import { renderToPipeableStream } from 'react-dom/server';
 import { ServerStyleContext } from '~/context/context';
 import type { EntryContext } from '@remix-run/node';
-import { renderToString } from 'react-dom/server';
-import { CacheProvider } from '@emotion/react';
 import { RemixServer } from '@remix-run/react';
+import { CacheProvider } from '@emotion/react';
+import { PassThrough } from 'stream';
 
 export default function handleRequest(
 	request: Request,
@@ -12,31 +12,56 @@ export default function handleRequest(
 	responseHeaders: Headers,
 	remixContext: EntryContext,
 ) {
-	const cache = createEmotionCache();
-	const { extractCriticalToChunks } = createEmotionServer(cache);
+	return new Promise((resolve, reject) => {
+		const stream = new PassThrough();
+		const cache = createEmotionCache();
+		let didError = false;
 
-	const html = renderToString(
-		<ServerStyleContext.Provider value={null}>
-			<CacheProvider value={cache}>
-				<RemixServer context={remixContext} url={request.url} />
-			</CacheProvider>
-		</ServerStyleContext.Provider>,
-	);
+		const { pipe, abort } = renderToPipeableStream(
+			<ServerStyleContext.Provider value={null}>
+				<CacheProvider value={cache}>
+					<RemixServer context={remixContext} url={request.url} />
+				</CacheProvider>
+			</ServerStyleContext.Provider>,
+			{
+				onShellReady() {
+					const readableStream = new ReadableStream({
+						start(controller) {
+							stream.on('data', (chunk) => {
+								controller.enqueue(new TextEncoder().encode(chunk));
+							});
 
-	const chunks = extractCriticalToChunks(html);
+							stream.on('end', () => {
+								controller.close();
+							});
 
-	const markup = renderToString(
-		<ServerStyleContext.Provider value={chunks.styles}>
-			<CacheProvider value={cache}>
-				<RemixServer context={remixContext} url={request.url} />
-			</CacheProvider>
-		</ServerStyleContext.Provider>,
-	);
+							stream.on('error', (err) => {
+								console.error(err);
+								controller.error(err);
+							});
+						},
+					});
 
-	responseHeaders.set('Content-Type', 'text/html');
+					responseHeaders.set('Content-Type', 'text/html');
+					resolve(
+						new Response(readableStream, {
+							status: didError ? 500 : responseStatusCode,
+							headers: responseHeaders,
+						}),
+					);
 
-	return new Response(`<!DOCTYPE html>${markup}`, {
-		status: responseStatusCode,
-		headers: responseHeaders,
+					pipe(stream);
+				},
+				onShellError(err) {
+					reject(err);
+				},
+				onError(err) {
+					didError = true;
+					console.error(err);
+				},
+			},
+		);
+
+		setTimeout(abort, 5000);
 	});
 }

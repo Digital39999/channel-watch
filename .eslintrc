@@ -3,7 +3,8 @@
     "env": {
         "browser": true,
         "commonjs": true,
-        "es2022": true
+        "es2022": true,
+        "node": true
     },
     "settings": {
         "react": {
@@ -64,6 +65,7 @@
         "react/jsx-uses-react": "off",
         "jsx-a11y/no-autofocus": "off",
         "@typescript-eslint/no-unused-vars": "warn",
+        "@typescript-eslint/no-namespace": "off",
         "brace-style": [
             "error",
             "1tbs",

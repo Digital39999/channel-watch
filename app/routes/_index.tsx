@@ -2,12 +2,12 @@ import { Flex, VStack, SimpleGrid, HStack, Box, Input, Text, Divider, IconButton
 import { APIChannel, APIUser, ChannelType, APIMessage, APIGroupDMChannel, APIDMChannel } from 'discord-api-types/v10';
 import { FaFolderPlus, FaRobot, FaTrash, FaUser, FaUserFriends } from 'react-icons/fa';
 import { ClientActionFunctionArgs, Link, useFetcher } from '@remix-run/react';
+import { getRecent, snowflakeToDate, updateRecent } from '~/other/utils';
 import useFetcherResponse from '~/hooks/useFetcherResponse';
-import { getRecent, updateRecent } from '~/other/utils';
-import { Fragment, useCallback, useState } from 'react';
 import { FiLogIn, FiLogOut } from 'react-icons/fi';
 import { useRootData } from '~/hooks/useRootData';
 import { WebReturnType } from '~/other/types';
+import { useCallback, useState } from 'react';
 import { IoMdRefresh } from 'react-icons/io';
 import { typedjson } from 'remix-typedjson';
 import axios from 'axios';
@@ -156,10 +156,19 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					id: data.id,
 					name: channelName,
 					guildId: 'guild_id' in data ? data.guild_id : undefined,
+					latestMessageTimestamp: latestMessage[0]?.timestamp,
 				});
 			} else {
 				exists.name = data.name;
-				current.channels = current.channels.map((x) => x.id === data.id ? exists : x);
+				exists.guildId = 'guild_id' in data ? data.guild_id : undefined;
+				exists.latestMessageTimestamp = latestMessage[0]?.timestamp;
+
+				current.channels = current.channels.map((x) => x.id === data.id ? exists : x).sort((a, b) => {
+					const aTime = new Date(a.latestMessageTimestamp || 0).getTime();
+					const bTime = new Date(b.latestMessageTimestamp || 0).getTime();
+
+					return bTime - aTime;
+				});
 			}
 
 			break;
@@ -179,8 +188,6 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				},
 			}).then((res) => res.data).catch((err) => err.response?.data) as (APIDMChannel | APIGroupDMChannel)[] | { message: string; };
 
-			console.log(data);
-
 			if (!data) return typedjson({ status: 401, error: 'Invalid token.' });
 			else if ('message' in data) return typedjson({ status: 401, error: data.message + '.' });
 
@@ -194,14 +201,21 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					currentChannels.push({
 						id: channel.id,
 						name: channel.type === ChannelType.DM ? `@${channel.recipients?.find((x) => x.id !== current.info?.id)?.username}` : `Group: ${channel.recipients?.map((x) => x.username).join(', ')}`,
+						latestMessageTimestamp: channel.last_message_id ? snowflakeToDate(channel.last_message_id).toISOString() : undefined,
 					});
 				} else {
 					exists.name = channel.type === ChannelType.DM ? `@${channel.recipients?.find((x) => x.id !== current.info?.id)?.username}` : `Group: ${channel.recipients?.map((x) => x.username).join(', ')}`;
+					exists.latestMessageTimestamp = channel.last_message_id ? snowflakeToDate(channel.last_message_id).toISOString() : undefined;
 					currentChannels.map((x) => x.id === channel.id ? exists : x);
 				}
 			}
 
-			current.channels = currentChannels;
+			current.channels = currentChannels.sort((a, b) => {
+				const aTime = new Date(a.latestMessageTimestamp || 0).getTime();
+				const bTime = new Date(b.latestMessageTimestamp || 0).getTime();
+
+				return bTime - aTime;
+			});
 
 			break;
 		}

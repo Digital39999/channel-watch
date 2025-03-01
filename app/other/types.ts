@@ -25,6 +25,7 @@ export type RecentChannel = {
 	id: string;
 	name: string | null;
 	guildId?: string;
+	latestMessageTimestamp?: string;
 };
 
 export type TimeUnits = 'ns' | 'µs' | 'ms' | 's' | 'm' | 'h' | 'd' | 'w';

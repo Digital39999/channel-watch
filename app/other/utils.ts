@@ -117,3 +117,7 @@ export function time(number: number, from: TimeUnits = 's', to: TimeUnits = 'ms'
 	if (from === to) return number;
 	else return (number * units[from]) / units[to];
 }
+
+export function snowflakeToDate(snowflake: string) {
+	return new Date((parseInt(snowflake) / 4194304) + 1420070400000);
+}

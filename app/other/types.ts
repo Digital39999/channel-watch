@@ -25,6 +25,7 @@ export type RecentChannel = {
 	id: string;
 	name: string | null;
 	guildId?: string;
+	isFromDm?: boolean;
 	latestMessageTimestamp?: string;
 };
 

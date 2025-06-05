@@ -157,11 +157,13 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					name: channelName,
 					guildId: 'guild_id' in data ? data.guild_id : undefined,
 					latestMessageTimestamp: latestMessage[0]?.timestamp,
+					isFromDm: data.type === ChannelType.DM || data.type === ChannelType.GroupDM,
 				});
 			} else {
 				exists.name = data.name;
 				exists.guildId = 'guild_id' in data ? data.guild_id : undefined;
 				exists.latestMessageTimestamp = latestMessage[0]?.timestamp;
+				exists.isFromDm = data.type === ChannelType.DM || data.type === ChannelType.GroupDM;
 
 				current.channels = current.channels.map((x) => x.id === data.id ? exists : x).sort((a, b) => {
 					const aTime = new Date(a.latestMessageTimestamp || 0).getTime();
@@ -202,6 +204,7 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 						id: channel.id,
 						name: channel.type === ChannelType.DM ? `@${channel.recipients?.find((x) => x.id !== current.info?.id)?.username}` : `Group: ${channel.recipients?.map((x) => x.username).join(', ')}`,
 						latestMessageTimestamp: channel.last_message_id ? snowflakeToDate(channel.last_message_id).toISOString() : undefined,
+						isFromDm: channel.type === ChannelType.DM || channel.type === ChannelType.GroupDM,
 					});
 				} else {
 					exists.name = channel.type === ChannelType.DM ? `@${channel.recipients?.find((x) => x.id !== current.info?.id)?.username}` : `Group: ${channel.recipients?.map((x) => x.username).join(', ')}`;
@@ -436,7 +439,11 @@ export default function Index() {
 						<Divider my={4} />
 
 						<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={2} w='100%'>
-							{current.channels?.length ? current.channels?.map((channel) => (
+							{current.channels?.length ? current.channels.sort((a, b) => {
+								const aTime = new Date(a.latestMessageTimestamp || 0).getTime();
+								const bTime = new Date(b.latestMessageTimestamp || 0).getTime();
+								return bTime - aTime;
+							}).map((channel) => (
 								<Flex
 									key={channel.id}
 									_hover={{ bg: 'alpha300' }}

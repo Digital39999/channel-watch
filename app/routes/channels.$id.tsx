@@ -64,12 +64,14 @@ export const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs
 	const channelId = params.id;
 	if (!channelId) throw new Response(null, { status: 400, statusText: 'Bad Request.' });
 
-	let channelData = current.channels?.find((channel) => channel.id === channelId);
+	const allChannels = [...current.recentChannels, ...current.dmChannels];
+
+	let channelData = allChannels.find((channel) => channel.id === channelId);
 	if (!channelData) {
-		const isElsewhere = recentsData.all?.find((user) => user.channels?.find((channel) => channel.id === channelId));
+		const isElsewhere = recentsData.all?.find((user) => user.recentChannels?.find((channel) => channel.id === channelId) || user.dmChannels?.find((channel) => channel.id === channelId));
 		if (!isElsewhere) throw new Response(null, { status: 403, statusText: 'This channel is not accessible.' });
 
-		channelData = isElsewhere.channels?.find((channel) => channel.id === channelId);
+		channelData = isElsewhere.recentChannels?.find((channel) => channel.id === channelId) || isElsewhere.dmChannels?.find((channel) => channel.id === channelId);
 		if (!channelData) throw new Response(null, { status: 404, statusText: 'Channel not found.' });
 
 		current = isElsewhere;
@@ -88,8 +90,6 @@ export const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs
 };
 
 
-// Exports.
-
 export function HydrateFallback() {
 	return (
 		<AbsoluteCenter>
@@ -97,8 +97,6 @@ export function HydrateFallback() {
 		</AbsoluteCenter>
 	);
 }
-
-// Page.
 
 export default function Channels() {
 	const { messages: initialMessages, channel, guild } = useTypedLoaderData<typeof clientLoader>();

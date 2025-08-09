@@ -198,7 +198,7 @@ export function SingleMessage({
 					avatar={message.referenced_message.author?.avatar ? `https://cdn.discordapp.com/avatars/${message.referenced_message.author.id}/${message.referenced_message.author.avatar}.${message.referenced_message.author.avatar.startsWith('a_') ? 'gif' : 'png'}` : undefined}
 					bot={message.referenced_message.author?.bot ?? false}
 					edited={message.referenced_message.edited_timestamp !== null}
-					attachment={message.referenced_message.attachments.length > 0}
+					attachment={message.referenced_message.attachments?.length > 0}
 					mentions={message.referenced_message.mentions.some((mention) => mention.id === message.author?.id)}
 					key={`referenced-${message.id}-${message.referenced_message.id}`}
 					onClick={() => {

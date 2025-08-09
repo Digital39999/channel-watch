@@ -1,7 +1,6 @@
 import type { ServerBuild } from '@remix-run/server-runtime';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { SecurityUtils } from '~/utils/functions.server.js';
-import { getConnInfo } from '@hono/node-server/conninfo';
 import { HttpBindings, serve } from '@hono/node-server';
 import { parseZodError, time } from '~/other/utils';
 import LoggerModule from '~/utils/logger.server';

@@ -1,4 +1,5 @@
-import { Recents, TimeUnits, WebReturnType } from './types';
+import { APIChannel, APIGuild, ChannelType } from 'discord-api-types/v10';
+import { Recent, Recents, TimeUnits, WebReturnType } from './types';
 import axios, { AxiosError } from 'axios';
 import { ZodError, ZodIssue } from 'zod';
 
@@ -120,4 +121,63 @@ export function time(number: number, from: TimeUnits = 's', to: TimeUnits = 'ms'
 
 export function snowflakeToDate(snowflake: string) {
 	return new Date((parseInt(snowflake) / 4194304) + 1420070400000);
+}
+
+export function formatChannelName(channel: APIChannel, currentUserId?: string): string {
+	switch (channel.type) {
+		case ChannelType.GuildText:
+		case ChannelType.GuildAnnouncement:
+		case ChannelType.GuildVoice:
+		case ChannelType.GroupDM: {
+			return channel.name || `ID: ${channel.id}`;
+		}
+		case ChannelType.DM: {
+			const recipient = channel.recipients?.find((x) => x.id !== currentUserId);
+			return recipient ? `@${recipient.username}` : 'Unknown User';
+		}
+		default: {
+			return 'Unknown Channel';
+		}
+	}
+}
+
+export function getImage(channel: APIChannel, guild: APIGuild | null): string {
+	const randomAvatar = `https://cdn.discordapp.com/embed/avatars/${(Number(channel.id) >> 22) % 6}.png`;
+
+	switch (channel.type) {
+		case ChannelType.DM: {
+			const participant = channel.recipients?.find((x) => x.avatar);
+			return participant ? `https://cdn.discordapp.com/avatars/${participant.id}/${participant.avatar}.${participant.avatar?.startsWith('a_') ? 'gif' : 'png'}` : randomAvatar;
+		}
+		case ChannelType.GroupDM: {
+			return channel.icon ? `https://cdn.discordapp.com/channel-icons/${channel.id}/${channel.icon}.${channel.icon?.startsWith('a_') ? 'gif' : 'png'}` : randomAvatar;
+		}
+		case ChannelType.GuildText:
+		case ChannelType.GuildVoice:
+		case ChannelType.GuildAnnouncement: {
+			return guild?.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.${guild.icon?.startsWith('a_') ? 'gif' : 'png'}` : randomAvatar;
+		}
+		default: {
+			return randomAvatar;
+		}
+	}
+}
+
+export function formatTimestamp(timestamp?: string, isMobile?: boolean): string {
+	if (!timestamp) return 'Never';
+
+	const date = new Date(timestamp);
+	const now = new Date();
+	const diffMs = now.getTime() - date.getTime();
+	const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+	if (diffDays === 0) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+	else if (diffDays === 1) return `Yesterday${!isMobile ? ` at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+	else if (diffDays < 7) return `${diffDays} days ago${!isMobile ? ` at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+	else return date.toLocaleDateString() + (!isMobile ? ` at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '');
+}
+
+export function getCurrentUser(recentsData: Recents): Recent | null {
+	if (typeof recentsData.currentIndex !== 'number' || recentsData.currentIndex < 0) return null;
+	return recentsData.all?.[recentsData.currentIndex] || null;
 }

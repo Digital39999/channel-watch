@@ -187,12 +187,6 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				if (existingChannelIndex === -1) currentUser.recentChannels.push(channelInfo);
 				else currentUser.recentChannels[existingChannelIndex] = channelInfo;
 
-				currentUser.recentChannels.sort((a, b) => {
-					const aTime = new Date(a.latestMessageTimestamp || 0).getTime();
-					const bTime = new Date(b.latestMessageTimestamp || 0).getTime();
-					return bTime - aTime;
-				});
-
 				break;
 			}
 
@@ -513,16 +507,15 @@ export default function Index() {
 							{current.dmChannels.length > 0 && (
 								<>
 									<Divider my={4} />
-									<VStack spacing={2} w='100%'>
+									<Grid gridTemplateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={2} w='100%'>
 										{current.dmChannels.map((channel) => (
 											<DMChannelCard
 												key={channel.id}
 												channel={channel}
-												isMobile={isMobile || false}
 												copyId={() => copyIdToClipboard(channel.id)}
 											/>
 										))}
-									</VStack>
+									</Grid>
 								</>
 							)}
 						</Flex>
@@ -619,13 +612,11 @@ export function ChannelCard({
 
 export type DMChannelCardProps = {
 	channel: RecentChannel;
-	isMobile: boolean;
 	copyId: () => void;
 };
 
 export function DMChannelCard({
 	channel,
-	isMobile,
 	copyId,
 }: DMChannelCardProps) {
 	return (
@@ -648,7 +639,7 @@ export function DMChannelCard({
 
 				{channel.latestMessageTimestamp && (
 					<Text fontSize='sm' color='alpha600'>
-						{formatTimestamp(channel.latestMessageTimestamp, isMobile)}
+						{formatTimestamp(channel.latestMessageTimestamp, navigator.language)}
 					</Text>
 				)}
 			</Flex>

@@ -163,7 +163,7 @@ export function getImage(channel: APIChannel, guild: APIGuild | null): string {
 	}
 }
 
-export function formatTimestamp(timestamp?: string, isMobile?: boolean): string {
+export function formatTimestamp(timestamp?: string, locale?: Intl.LocalesArgument): string {
 	if (!timestamp) return 'Never';
 
 	const date = new Date(timestamp);
@@ -172,9 +172,9 @@ export function formatTimestamp(timestamp?: string, isMobile?: boolean): string 
 	const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
 	if (diffDays === 0) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-	else if (diffDays === 1) return `Yesterday${!isMobile ? ` at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`;
-	else if (diffDays < 7) return `${diffDays} days ago${!isMobile ? ` at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`;
-	else return date.toLocaleDateString() + (!isMobile ? ` at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '');
+	else if (diffDays === 1) return 'Yesterday';
+	else if (diffDays < 7) return `${diffDays} days ago`;
+	else return date.toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
 export function getCurrentUser(recentsData: Recents): Recent | null {

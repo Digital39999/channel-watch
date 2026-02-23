@@ -10,6 +10,21 @@ import { Messages } from '~/components/Messages';
 import { getRecent } from '~/other/utils';
 import axios from 'axios';
 
+const messagesLimit = 100;
+
+function dedupeMessages<T extends { id: string }>(messages: T[]): T[] {
+	const seen = new Set<string>();
+	const deduped: T[] = [];
+
+	for (const message of messages) {
+		if (seen.has(message.id)) continue;
+		seen.add(message.id);
+		deduped.push(message);
+	}
+
+	return deduped;
+}
+
 async function getGuild({ guildId, current }: GetGuildArgs) {
 	const guildData = await axios({
 		method: 'GET',
@@ -40,7 +55,7 @@ async function getGuild({ guildId, current }: GetGuildArgs) {
 async function getMessages({ channelId, before, current }: GetMessagesArgs) {
 	const messageData = await axios({
 		method: 'GET',
-		url: `/api/discord/channels/${channelId}/messages` + '?limit=100' + (before ? `&before=${before}` : ''),
+		url: `/api/discord/channels/${channelId}/messages` + `?limit=${messagesLimit}` + (before ? `&before=${before}` : ''),
 		headers: {
 			'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
 		},
@@ -100,32 +115,57 @@ export function HydrateFallback() {
 
 export default function Channels() {
 	const { messages: initialMessages, channel, guild } = useTypedLoaderData<typeof clientLoader>();
-	const [messages, setMessages] = useState<APIMessage[]>(initialMessages as never);
+	const normalizedInitialMessages = useMemo(() => dedupeMessages(initialMessages as APIMessage[]), [initialMessages]);
+	const [messages, setMessages] = useState<APIMessage[]>(normalizedInitialMessages);
+	const [hasMore, setHasMore] = useState<boolean>(normalizedInitialMessages.length >= messagesLimit);
 	const { current } = useRootData();
 
 	const fetcher = useFetcher<{ messages: APIMessage[] }>();
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+	const messageIdsRef = useRef<Set<string>>(new Set(normalizedInitialMessages.map((message) => message.id)));
 
 	const lastMessageId = useMemo(() => messages.length > 0 ? messages[0]?.id : null, [messages]);
 
 	useEffect(() => {
-		if (fetcher.data?.messages.length) {
+		setMessages(normalizedInitialMessages);
+		setHasMore(normalizedInitialMessages.length >= messagesLimit);
+		messageIdsRef.current = new Set(normalizedInitialMessages.map((message) => message.id));
+	}, [normalizedInitialMessages, channel?.id]);
+
+	useEffect(() => {
+		if (fetcher.data) {
+			const fetchedMessages = dedupeMessages(fetcher.data.messages || []);
+			if (fetchedMessages.length === 0) {
+				setHasMore(false);
+				return;
+			}
+
+			const uniqueFetchedMessages = fetchedMessages.filter((message) => !messageIdsRef.current.has(message.id));
+			if (uniqueFetchedMessages.length === 0) {
+				setHasMore(false);
+				return;
+			}
+
+			uniqueFetchedMessages.forEach((message) => messageIdsRef.current.add(message.id));
+
 			setMessages((prev) => [
-				...(fetcher.data?.messages as APIMessage[]),
+				...uniqueFetchedMessages as APIMessage[],
 				...prev,
 			]);
+
+			setHasMore(fetchedMessages.length >= messagesLimit);
 		}
 	}, [fetcher.data]);
 
 	useEffect(() => {
-		if (fetcher.data?.messages.length) console.log(`[Channels] Fetched ${fetcher.data?.messages.length} messages, total: ${messages.length}, last: ${lastMessageId}.`);
+		if (fetcher.data?.messages?.length) console.log(`[Channels] Fetched ${fetcher.data?.messages.length} messages, total: ${messages.length}, last: ${lastMessageId}.`);
 		else console.log(`[Channels] Messages updated, total: ${messages.length}, last: ${lastMessageId}.`);
 	}, [fetcher.data, messages, lastMessageId]);
 
 	const loadNext = useCallback(() => {
-		if (!lastMessageId || fetcher.state === 'loading' || fetcher.state === 'submitting') return;
-		fetcher.submit(`?before=${lastMessageId}`);
-	}, [fetcher, lastMessageId]);
+		if (!hasMore || !lastMessageId || fetcher.state === 'loading' || fetcher.state === 'submitting') return;
+		fetcher.load(`?before=${lastMessageId}`);
+	}, [fetcher, hasMore, lastMessageId]);
 
 	const scrollToBottom = useCallback(() => {
 		if (scrollContainerRef.current) {
@@ -174,6 +214,7 @@ export default function Channels() {
 								aria-label='Load More'
 								icon={<FaDownload />}
 								isLoading={fetcher.state === 'loading' || fetcher.state === 'submitting'}
+								isDisabled={!hasMore}
 								onClick={loadNext}
 							/>
 						</Tooltip>

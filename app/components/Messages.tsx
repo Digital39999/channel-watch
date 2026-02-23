@@ -18,28 +18,36 @@ export type Mentions = {
 	channels: Map<string, APIChannel>;
 };
 
+const TOKEN_PREFIX = '__CW_RENDER_TOKEN_';
+const TOKEN_REGEX = /__CW_RENDER_TOKEN_(\d+)__/g;
+
+function escapeHtml(content: string) {
+	return content
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
+function restoreTokens(content: string, tokens: string[]) {
+	return content.replace(TOKEN_REGEX, (_, index: string) => tokens[Number(index)] || '');
+}
+
+function sanitizeSystemMessageContent(content: string) {
+	const escaped = escapeHtml(content);
+	return escaped
+		.replace(/&lt;i&gt;/g, '<i>')
+		.replace(/&lt;\/i&gt;/g, '</i>')
+		.replace(/&lt;b&gt;/g, '<b>')
+		.replace(/&lt;\/b&gt;/g, '</b>')
+		.replace(/&lt;strong&gt;/g, '<strong>')
+		.replace(/&lt;\/strong&gt;/g, '</strong>');
+}
+
 export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]; guild: Guild | null; loggedIn?: string; }) {
 	const [highlighted, setHighlighted] = useState<string | null>(null);
 	const { colorMode } = useColorMode();
-
-	const messagesKey = useMemo(() => `${messages?.[0]?.id}-${Date.now()}`, [messages]);
-
-	const allUsers = useMemo(() => {
-		const users = new Map<string, APIUser>();
-		for (const message of messages) {
-			if (message.author) users.set(message.author.id, message.author);
-
-			if (message.mentions) {
-				for (const user of message.mentions) {
-					users.set(user.id, user);
-				}
-			}
-		}
-
-		return users;
-	}, [messages]);
-
-	const getUser = useCallback((id: string) => allUsers.get(id), [allUsers]);
 
 	const allRoles = useMemo(() => {
 		const roles = new Map<string, APIRole>();
@@ -61,21 +69,17 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 		return channels;
 	}, [guild?.channels]);
 
-	const getChannel = useCallback((id: string) => allChannels.get(id), [allChannels]);
-
 	return (
-		<DiscordMessages lightTheme={colorMode === 'light'} compactMode={false} key={messagesKey}>
-			{messages.map((message, index) => {
-				if (!NormalMessages.includes(message.type)) return SystemMessage({ message, guild, key: `${message.id}-${index}-${messagesKey}` });
+		<DiscordMessages lightTheme={colorMode === 'light'} compactMode={false}>
+			{messages.map((message) => {
+				if (!NormalMessages.includes(message.type)) return SystemMessage({ message, guild, key: message.id });
 				else return (
 					<SingleMessage
-						key={`${message.id}-${index}-${messagesKey}`}
+						key={message.id}
 
 						loggedIn={loggedIn}
 						message={message}
-						getUser={getUser}
 						getRole={getRole}
-						getChannel={getChannel}
 
 						allChannels={allChannels}
 						highlighted={highlighted === message.id}
@@ -100,9 +104,7 @@ export function SingleMessage({
 }: {
 	loggedIn?: string;
 	message: APIMessage;
-	getUser: (id: string) => APIUser | undefined;
 	getRole: (id: string) => APIRole | undefined;
-	getChannel: (id: string) => Channel | undefined;
 
 	allChannels: Map<string, Channel>;
 	highlighted: boolean;
@@ -177,9 +179,9 @@ export function SingleMessage({
 		<DiscordMessage
 			verified
 			id={message.id}
-			author={message.author?.username + ` (${message.id})`}
+			author={message.author?.username || 'Unknown User'}
 			avatar={message.author?.avatar ? `https://cdn.discordapp.com/avatars/${message.author.id}/${message.author.avatar}.${message.author.avatar.startsWith('a_') ? 'gif' : 'png'}` : undefined}
-			highlight={message.content.includes('@everyone') || message.content.includes('@here') || message.mentions.some((mention) => mention.id === loggedIn)}
+			highlight={message.mention_everyone || message.mentions.some((mention) => mention.id === loggedIn)}
 			edited={message.edited_timestamp !== null}
 			timestamp={new Date(message.timestamp)}
 			roleColor={colorMode === 'light' ? '#000000' : '#ffffff'}
@@ -205,9 +207,14 @@ export function SingleMessage({
 						setHighlighted(message.referenced_message!.id);
 
 						const element = document.getElementById(message.referenced_message!.id);
-						if (element) element.scrollIntoView({ behavior: 'smooth' });
+						if (!element) {
+							setTimeout(() => setHighlighted(''), 2000);
+							return;
+						}
 
-						const distance = Math.abs(element!.getBoundingClientRect().top - document.documentElement.getBoundingClientRect().top);
+						element.scrollIntoView({ behavior: 'smooth' });
+
+						const distance = Math.abs(element.getBoundingClientRect().top - document.documentElement.getBoundingClientRect().top);
 						setTimeout(() => setHighlighted(''), distance < 1000 ? 3000 : distance);
 					}}
 				>
@@ -304,7 +311,7 @@ export function SingleMessage({
 				</DiscordAttachments>
 			)}
 
-			{message.embeds ? message.embeds.filter((embed) => embed.type === 'rich').map((embed, index) => (
+			{message.embeds ? message.embeds.map((embed, index) => (
 				<DiscordEmbed
 					key={`embed-${index}-${message.id}`}
 					color={embed.color ? getColorInHex(embed.color) : undefined}
@@ -432,7 +439,7 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 				channelName={channelName}
 				type={type}
 			>
-				<span dangerouslySetInnerHTML={{ __html: content || m.content }} />
+				<span dangerouslySetInnerHTML={{ __html: sanitizeSystemMessageContent(content || m.content || '') }} />
 
 				{message.thread && (
 					<DiscordThread
@@ -499,8 +506,8 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 
 	switch (message.type as (MessageType | (number & {}))) { // eslint-disable-line
 		case MessageType.Default: return null;
-		case MessageType.RecipientAdd: return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> added <i>${message.mentions[0].username}</i> to the group.`);
-		case MessageType.RecipientRemove: return getSystemMessage(message, 'leave', `<i>${message.author?.username}</i> removed <i>${message.mentions[0].username}</i> from the group.`);
+		case MessageType.RecipientAdd: return getSystemMessage(message, 'join', `<i>${message.author?.username}</i> added <i>${message.mentions?.[0]?.username || 'a user'}</i> to the group.`);
+		case MessageType.RecipientRemove: return getSystemMessage(message, 'leave', `<i>${message.author?.username}</i> removed <i>${message.mentions?.[0]?.username || 'a user'}</i> from the group.`);
 		case MessageType.Call: {
 			if (message.call?.ended_timestamp) return getSystemMessage(message, 'missed-call', `<i>${message.author?.username}</i> started a call that lasted ${formattedDateDifference(message.call.ended_timestamp, message.timestamp)}.`);
 			return getSystemMessage(message, 'call', `<i>${message.author?.username}</i> started a call.`);
@@ -546,36 +553,43 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 }
 
 export function parseText(content: string, mentions: Mentions, inEmbed: boolean, onlyFirst?: boolean) {
-	const onlyEmojiMessage = isMessageOnlyEmojis(content);
-
-	let parsedMentions = parseMentionsContent(content, mentions, inEmbed, onlyEmojiMessage);
-	if (onlyFirst) parsedMentions = parsedMentions.split('\n')[0];
-
+	const normalizedContent = onlyFirst ? (content || '').split('\n')[0] || '' : (content || '');
+	const onlyEmojiMessage = isMessageOnlyEmojis(normalizedContent);
+	const parsedMentions = parseMentionsContent(normalizedContent, mentions, inEmbed, onlyEmojiMessage);
 	const parsedMarkdown = parseMarkdown(parsedMentions, inEmbed);
 	return <Text as={'span'} dangerouslySetInnerHTML={{ __html: parsedMarkdown || '' }} />;
 }
 
 export function parseMentionsContent(content: string, mentions: Mentions, inEmbed: boolean, isOnlyEmoji: boolean) {
-	content = content.replace(/<id:(\w+)>/g, (full, id) => {
+	const tokens: string[] = [];
+	const makeToken = (value: string) => `${TOKEN_PREFIX}${tokens.push(value) - 1}__`;
+
+	// Mentions are ignored inside code blocks/inline code in Discord.
+	content = content.replace(/```[\s\S]*?```/g, (full) => makeToken(escapeHtml(full)));
+	content = content.replace(/`[^`\n]+`/g, (full) => makeToken(escapeHtml(full)));
+
+	content = content.replace(/<id:(\w+)>/g, (_, id) => {
 		switch (id) {
-			case 'home': return '<discord-mention type=\'server-guide\'>Server Guide</discord-mention>';
-			case 'customize': case 'browse': return '<discord-mention type=\'channels-and-roles\'>Channels & Roles</discord-mention>';
+			case 'home': return makeToken('<discord-mention type=\'server-guide\'>Server Guide</discord-mention>');
+			case 'customize': case 'browse': return makeToken('<discord-mention type=\'channels-and-roles\'>Channels &amp; Roles</discord-mention>');
 			// case '
-			default: return full;
+			default: return `<id:${id}>`;
 		}
 	});
 
-	content = content.replace(/<@!?(\d+)>/g, (full, id) => {
+	content = content.replace(/<@!?(\d+)>/g, (_, id) => {
 		const user = mentions.users.get(id);
-		return `<discord-mention type='user' id='${id}'>${user?.username || id}</discord-mention>`;
+		const name = escapeHtml(user?.global_name || user?.username || id);
+		return makeToken(`<discord-mention type='user' id='${id}'>@${name}</discord-mention>`);
 	});
 
-	content = content.replace(/<@&(\d+)>/g, (full, id) => {
+	content = content.replace(/<@&(\d+)>/g, (_, id) => {
 		const role = mentions.roles.get(id);
-		return `<discord-mention type='role' id='${id}'>${role?.name || id}</discord-mention>`;
+		const name = escapeHtml(role?.name || id);
+		return makeToken(`<discord-mention type='role' id='${id}'>@${name}</discord-mention>`);
 	});
 
-	content = content.replace(/<#(\d+)>/g, (full, id) => {
+	content = content.replace(/<#(\d+)>/g, (_, id) => {
 		const channel = mentions.channels.get(id);
 		const type =
 			channel?.type === ChannelType.GuildText ? 'channel' :
@@ -583,92 +597,115 @@ export function parseMentionsContent(content: string, mentions: Mentions, inEmbe
 					channel?.type === ChannelType.GuildForum ? 'forum' :
 						channel?.type === ChannelType.PrivateThread ? 'thread' :
 							channel?.type === ChannelType.PublicThread ? 'thread' :
-								'channel';
+								channel?.type === ChannelType.AnnouncementThread ? 'thread' :
+									'channel';
 
-		return `<discord-mention type='${type}' id='${id}'>${channel?.name || id}</discord-mention>`;
+		const name = escapeHtml(channel?.name || id);
+		return makeToken(`<discord-mention type='${type}' id='${id}'>#${name}</discord-mention>`);
 	});
 
-	content = content.replace(/<\/(\w+):(\d+)>/g, (_, name, id) => {
-		return `<discord-mention type='slash' id='${id}'>${name}</discord-mention>`;
+	content = content.replace(/<\/([^:\s>]+):(\d+)>/g, (_, name, id) => {
+		return makeToken(`<discord-mention type='slash' id='${id}'>/${escapeHtml(name)}</discord-mention>`);
 	});
 
-	content = content.replace(/<a?:(\w+):([0-9]+)>/g, (full, name, id) => {
+	content = content.replace(/<a?:([a-zA-Z0-9_]+):([0-9]+)>/g, (full, name, id) => {
 		const animated = full.startsWith('<a:');
-		return `<discord-custom-emoji name='${name}' ${inEmbed ? 'embedEmoji' : ''} ${isOnlyEmoji ? 'jumbo' : ''} url='${`https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}`}'></discord-custom-emoji>`;
+		const embedAttr = inEmbed ? 'embedEmoji ' : '';
+		const jumboAttr = isOnlyEmoji ? 'jumbo ' : '';
+		return makeToken(`<discord-custom-emoji name='${escapeHtml(name)}' ${embedAttr}${jumboAttr}url='https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}'></discord-custom-emoji>`);
 	});
 
-	return content;
+	content = content.replace(/(^|[\s([{-])(@everyone|@here)(?=$|[\s)\]}.,!?;:])/g, (_, prefix: string, mention: string) => {
+		const type = mention === '@everyone' ? 'everyone' : 'here';
+		return `${prefix}${makeToken(`<discord-mention type='${type}'>${mention}</discord-mention>`)}`;
+	});
+
+	content = escapeHtml(content);
+	return restoreTokens(content, tokens);
 }
 
 export function parseMarkdown(content: string, inEmbed: boolean) {
-	const splitAndTrimAll = (m: string) => m.split('\n').map((s) => s.trim()).join('\n').trim();
-	const anyWhateverLink = /\b((?:https?|ftp):\/\/(?:www\.)?[^\s()<>]+(?:\([^\s()<>]*\)|[^\s()<>])*)\b/;
+	const tokens: string[] = [];
+	const makeToken = (value: string) => `${TOKEN_PREFIX}${tokens.push(value) - 1}__`;
+	const makeLink = (url: string, label?: string) => {
+		return makeToken(`<discord-link href='${url}' rel='noreferrer noopener' target='_blank'>${label || url}</discord-link>`);
+	};
 
-	content = content.replace(/(?:^|\n)> \s*(.*)/g, (_, text) => {
-		return `<discord-quote>${text}</discord-quote>`;
+	content = content.replace(/<discord-(mention|custom-emoji)[\s\S]*?<\/discord-\1>/g, (full) => makeToken(full));
+
+	content = content.replace(/```([a-zA-Z0-9+#.-]*)\n([\s\S]*?)```/g, (_, __, code) => {
+		const normalizedCode = code.endsWith('\n') ? code.slice(0, -1) : code;
+		return makeToken(`<discord-code multiline ${inEmbed ? 'embed' : ''}>${normalizedCode}</discord-code>`);
 	});
 
-	content = content.replace(/^(#{1,3})\s*(.+)$/gm, (_, hashes, text) => {
-		return `<discord-header level='${hashes.length}'>${text}</discord-header>`;
+	content = content.replace(/`([^`\n]+)`/g, (_, code) => {
+		return makeToken(`<discord-code ${inEmbed ? 'embed' : ''}>${code}</discord-code>`);
 	});
 
-	content = content.replace(/<(https?:\/\/\S+)>/g, (_, url) => {
-		return `<discord-link href='${url}' rel='noreferrer noopener' target='_blank'>${url}</discord-link>`;
+	content = content.replace(/(^|\n)(#{1,3})\s+([^\n]+)/g, (_, prefix: string, hashes: string, text: string) => {
+		return `${prefix}<discord-header level='${hashes.length}'>${text}</discord-header>`;
 	});
 
-	content = content.replace(/\[([^[\]]*?)\]\((.*?)\)/g, (_, text, url) => {
-		return `<discord-link href='${url}' target='_blank'>${text}</discord-link>`;
+	content = content.replace(/(^|\n)>>>[ \t]?([\s\S]*)$/m, (_, prefix: string, text: string) => {
+		return `${prefix}<discord-quote>${text.replace(/\n/g, '<br />')}</discord-quote>`;
 	});
 
-	content = content.replace(anyWhateverLink, (url) => {
-		const before = content[content.indexOf(url) - 1];
-		const after = content[content.indexOf(url) + url.length];
-		if (before || after) return url;
-
-		return `<discord-link href='${url}' target='_blank'>${url}</discord-link>`;
+	content = content.replace(/(^|\n)>\s?(.*)/g, (_, prefix: string, text: string) => {
+		return `${prefix}<discord-quote>${text}</discord-quote>`;
 	});
 
-	content = content.replace(/```(\w+)\n([\s\S]*?)```/g, (_, __, code) => {
-		return `<discord-code multiline ${inEmbed ? 'embed' : ''}>${splitAndTrimAll(code)}</discord-code>`;
+	content = content.replace(/(^|\n)-#\s*(.*)/g, (_, prefix: string, text: string) => {
+		return `${prefix}<discord-subscript>${text}</discord-subscript>`;
 	});
 
-	content = content.replace(/`([^`]+)`/g, (_, code) => {
-		return `<discord-code ${inEmbed ? 'embed' : ''}>${code}</discord-code>`;
+	content = content.replace(/&lt;((?:https?|ftp):\/\/[^\s&]+)&gt;/g, (_, url: string) => {
+		return makeLink(url);
 	});
 
-	content = content.replace(/~~([^~]+)~~/g, (_, text) => {
+	content = content.replace(/\[([^[\]]+)\]\(((?:https?|ftp):\/\/[^\s)]+)\)/g, (_, text: string, url: string) => {
+		return makeLink(url, text);
+	});
+
+	content = content.replace(/(^|[\s(])((?:https?|ftp):\/\/[^\s<]+)/g, (_, prefix: string, rawUrl: string) => {
+		const trailingMatch = rawUrl.match(/[),.!?:;]+$/);
+		const trailing = trailingMatch ? trailingMatch[0] : '';
+		const url = trailing ? rawUrl.slice(0, -trailing.length) : rawUrl;
+		return `${prefix}${makeLink(url)}${trailing}`;
+	});
+
+	content = content.replace(/~~([^~]+)~~/g, (_, text: string) => {
 		return `<span style='text-decoration: line-through;'>${text}</span>`;
 	});
 
-	content = content.replace(/(?:^|\n)-#\s*(.*)/g, (_, text) => {
-		return `<discord-subscript>${text}</discord-subscript>`;
+	content = content.replace(/\|\|([^|]+)\|\|/g, (_, text: string) => {
+		return `<discord-spoiler>${text}</discord-spoiler>`;
+	});
+
+	content = content.replace(/\*\*([^\n]+?)\*\*/g, (_, text: string) => {
+		return `<discord-bold>${text}</discord-bold>`;
+	});
+
+	content = content.replace(/__([^\n]+?)__/g, (_, text: string) => {
+		return `<discord-underlined>${text}</discord-underlined>`;
+	});
+
+	content = content.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, (_, text: string) => {
+		return `<discord-italic>${text}</discord-italic>`;
+	});
+
+	content = content.replace(/(?<!_)_([^_\n]+)_(?!_)/g, (_, text: string) => {
+		return `<discord-italic>${text}</discord-italic>`;
 	});
 
 	content = content.replace(/\n/g, '<br />');
 
-	content = content.replace(/\*\*([^*]+)\*\*/g, (_, text) => {
-		return `<discord-bold>${text}</discord-bold>`;
-	});
-
-	content = content.replace(/__([^_]+)__/g, (_, text) => {
-		return `<discord-underlined>${text}</discord-underlined>`;
-	});
-
-	content = content.replace(/\*([^*]+)\*/g, (_, text) => {
-		return `<discord-italic>${text}</discord-italic>`;
-	});
-
-	content = content.replace(/_([^_]+)_/g, (_, text) => {
-		return `<discord-italic>${text}</discord-italic>`;
-	});
-
-	content = content.replace(/\|\|([^|]+)\|\|/g, (_, text) => {
-		return `<discord-spoiler>${text}</discord-spoiler>`;
-	});
-
-	return content;
+	return restoreTokens(content, tokens);
 }
 
 export function isMessageOnlyEmojis(content: string) {
-	return !content.replace(/<a?:\w+:\d+>/g, '').trim();
+	const withoutCustomEmojis = (content || '').replace(/<a?:\w+:\d+>/g, '');
+	const normalized = withoutCustomEmojis.replace(/\s/g, '');
+	if (!normalized) return true;
+
+	return /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\uFE0F|\u200D)+$/u.test(normalized);
 }

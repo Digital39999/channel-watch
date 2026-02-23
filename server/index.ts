@@ -24,7 +24,8 @@ app.use('*', logger((m, ...rest) => LoggerModule('Server', m, 'blue', ...rest)))
 app.get('/api/discord/*', async (c) => {
 	const targetBase = 'https://discord.com/api';
 	const targetPath = c.req.path.replace('/api/discord', '');
-	const target = targetBase + targetPath;
+	const targetSearch = new URL(c.req.raw.url).search;
+	const target = targetBase + targetPath + targetSearch;
 
 	const isBot = c.req.header('Authorization')?.startsWith('Bot');
 

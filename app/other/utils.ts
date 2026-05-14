@@ -1,7 +1,36 @@
+import { Recent, RecentChannel, RecentInfo, Recents, TimeUnits, WebReturnType } from './types';
 import { APIChannel, APIGuild, ChannelType } from 'discord-api-types/v10';
-import { Recent, Recents, TimeUnits, WebReturnType } from './types';
+import { z, ZodError, ZodIssue } from 'zod';
 import axios, { AxiosError } from 'axios';
-import { ZodError, ZodIssue } from 'zod';
+
+const RecentInfoSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	avatar: z.string().nullable(),
+}) satisfies z.ZodType<RecentInfo>;
+
+const RecentChannelSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	guildId: z.string().optional(),
+	imageUrl: z.string().optional(),
+	isFromDm: z.boolean().optional(),
+	latestMessageTimestamp: z.string().optional(),
+}) satisfies z.ZodType<RecentChannel>;
+
+const RecentSchema = z.object({
+	lastUsed: z.number(),
+	token: z.string(),
+	isBot: z.boolean(),
+	info: RecentInfoSchema,
+	dmChannels: z.array(RecentChannelSchema),
+	recentChannels: z.array(RecentChannelSchema),
+}) satisfies z.ZodType<Recent>;
+
+const RecentsSchema = z.object({
+	currentIndex: z.number().optional(),
+	all: z.array(RecentSchema).optional(),
+}) satisfies z.ZodType<Recents>;
 
 export function formatBigNumbers(number: number | string) {
 	if (typeof number === 'string') number = parseInt(number);
@@ -85,16 +114,26 @@ export async function getRecent() {
 	if (!recentData) recentData = { data: {}, status: 200 };
 	else if ('error' in recentData) throw new Response(null, { status: 404, statusText: Array.isArray(recentData.error) ? recentData.error.join('. ') : recentData.error });
 
-	return recentData.data;
+	const parsed = RecentsSchema.safeParse(recentData.data);
+	if (!parsed.success) {
+		console.warn('Corrupted localStorage data cleared:', parseZodError(parsed.error));
+		localStorage.removeItem('recent');
+		return { currentIndex: -1, all: [] } as Recents;
+	}
+
+	return parsed.data;
 }
 
 export async function updateRecent(newData: Recents) {
 	if (typeof localStorage === 'undefined') return null;
 
+	const validated = RecentsSchema.safeParse(newData);
+	if (!validated.success) throw new Error(`Invalid Recents data: ${parseZodError(validated.error).join('. ')}`);
+
 	const encryptedText = await axios<WebReturnType<string>>({
 		method: 'POST',
 		url: '/api/crypto',
-		data: { type: 'encrypt', data: JSON.stringify(newData) },
+		data: { type: 'encrypt', data: JSON.stringify(validated.data) },
 	}).then((res) => res.data).catch((err: AxiosError<WebReturnType<string>>) => err.response?.data);
 
 	if (!encryptedText) throw new Response(null, { status: 404, statusText: 'Not Found 1.' });
@@ -125,18 +164,11 @@ export function snowflakeToDate(snowflake: string) {
 
 export function formatChannelName(channel: APIChannel, currentUserId?: string): string {
 	switch (channel.type) {
-		case ChannelType.GuildText:
-		case ChannelType.GuildAnnouncement:
-		case ChannelType.GuildVoice:
-		case ChannelType.GroupDM: {
-			return channel.name || `ID: ${channel.id}`;
-		}
 		case ChannelType.DM: {
-			const recipient = channel.recipients?.find((x) => x.id !== currentUserId);
-			return recipient ? `@${recipient.username}` : 'Unknown User';
+			return channel.recipients?.filter((x) => x.id !== currentUserId).map((r) => `@${r.username}`).join(', ') || 'Unknown User';
 		}
 		default: {
-			return 'Unknown Channel';
+			return channel.name || `ID: ${channel.id}`;
 		}
 	}
 }

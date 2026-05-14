@@ -25,7 +25,7 @@
 		"@remix-run/react": "2.12.0",
 		"@remix-run/serve": "2.12.0",
 		"@remix-run/server-runtime": "2.13.1",
-		"@skyra/discord-components-react": "4.0.0-alpha.31",
+		"@skyra/discord-components-react": "4.0.2",
 		"axios": "1.6.8",
 		"discord-api-types": "0.37.94",
 		"dotenv": "16.4.5",

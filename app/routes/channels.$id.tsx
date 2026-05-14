@@ -5,6 +5,7 @@ import { GetGuildArgs, Channel, GetMessagesArgs } from '~/other/types';
 import { typedjson, useTypedLoaderData } from 'remix-typedjson';
 import { APIGuild, APIMessage } from 'discord-api-types/v10';
 import { FaBackspace, FaDownload } from 'react-icons/fa';
+import { ClientOnly } from '~/components/ClientOnly';
 import { useRootData } from '~/hooks/useRootData';
 import { Messages } from '~/components/Messages';
 import { getRecent } from '~/other/utils';
@@ -241,11 +242,13 @@ export default function Channels() {
 					scrollBehavior='smooth'
 					ref={scrollContainerRef}
 				>
-					<Messages
-						guild={guild}
-						messages={messages}
-						loggedIn={current?.info?.id}
-					/>
+					<ClientOnly fallback={<Box p={4} textAlign='center'>Loading messages...</Box>}>
+						<Messages
+							guild={guild}
+							messages={messages}
+							loggedIn={current?.info?.id}
+						/>
+					</ClientOnly>
 
 					{(fetcher.state === 'loading' || fetcher.state === 'submitting') && (
 						<Box p={2} borderRadius={8} bg='alpha200'>

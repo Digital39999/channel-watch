@@ -171,7 +171,7 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				}
 
 				const messages = messagesData as APIMessage[];
-				const channelName = formatChannelName(channel, currentUser.info?.id || '');
+				const channelName = formatChannelName(channel, currentUser.info.id);
 				if (!currentUser.recentChannels) currentUser.recentChannels = [];
 
 				const existingChannelIndex = currentUser.recentChannels.findIndex((c) => c.id === channel.id);
@@ -202,7 +202,7 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					},
 				}).then((res) => res.data).catch((err) => err.response?.data);
 
-			if (!dmsData || 'message' in dmsData) {
+				if (!dmsData || 'message' in dmsData) {
 					return typedjson({
 						status: 401,
 						error: dmsData?.message ? `${dmsData.message}.` : 'Invalid token.',
@@ -210,7 +210,7 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				}
 
 				if (!Array.isArray(dmsData)) {
-					console.error('[getDMs] Expected array but got:', typeof dmsData, dmsData);
+					console.error('Expected array but got:', typeof dmsData, dmsData);
 					return typedjson({
 						status: 500,
 						error: 'Unexpected response from Discord API.',
@@ -221,10 +221,10 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				const allowedTypes = [ChannelType.DM, ChannelType.GroupDM];
 				const filteredChannels = dmChannels.filter((c) => allowedTypes.includes(c.type));
 
-				if (!currentUser.dmChannels) currentUser.dmChannels = [];
+				if (!currentUser.dmChannels || !Array.isArray(currentUser.dmChannels)) currentUser.dmChannels = [];
 
 				for (const dmChannel of filteredChannels) {
-					const channelName = formatChannelName(dmChannel, currentUser.info?.id || '');
+					const channelName = formatChannelName(dmChannel, currentUser.info.id);
 					const existingChannelIndex = currentUser.dmChannels.findIndex((c) => c.id === dmChannel.id);
 
 					const channelInfo = {
@@ -243,14 +243,6 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					const aTime = new Date(a.latestMessageTimestamp || 0).getTime();
 					const bTime = new Date(b.latestMessageTimestamp || 0).getTime();
 					return bTime - aTime;
-				});
-
-				currentUser.dmChannels = currentUser.dmChannels.filter((c) => {
-					if (!c.latestMessageTimestamp) return false;
-					const lastMessageDate = new Date(c.latestMessageTimestamp);
-					const now = new Date();
-					const diff = now.getTime() - lastMessageDate.getTime();
-					return diff < 30 * 24 * 60 * 60 * 1000;
 				});
 
 				break;
@@ -539,8 +531,8 @@ export default function Index() {
 						})}
 						onLoginUser={(recent) => submitRequest('login', {
 							type: 'login',
-							isBot: recent.isBot || false,
-							token: recent.token || '',
+							isBot: recent.isBot,
+							token: recent.token,
 						})}
 					/>
 				) : null}
@@ -721,7 +713,7 @@ export function RecentUsersSection({
 									aria-label='Delete'
 									icon={<FaTrash />}
 									isLoading={currentlySubmitting === 'deleteUser'}
-									onClick={() => onDeleteUser(recent.token || '')}
+									onClick={() => onDeleteUser(recent.token)}
 								/>
 
 								<IconButton

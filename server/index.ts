@@ -82,11 +82,9 @@ app.post('/api/crypto', async (c) => {
 
 /* -------------------- Error Handling -------------------- */
 
-app.onError((err, c) => {
+app.onError((err) => {
 	LoggerModule('HonoError', `Unhandled error: ${err.message}`, 'red');
-	if (err instanceof Error && err.stack) {
-		LoggerModule('HonoError', err.stack, 'red');
-	}
+	if (err instanceof Error && err.stack) LoggerModule('HonoError', err.stack, 'red');
 	return new Response(JSON.stringify({ error: 'Internal Server Error.', status: 500 }), { status: 500 });
 });
 

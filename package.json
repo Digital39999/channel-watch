@@ -12,6 +12,11 @@
 		"typecheck": "tsc --watch"
 	},
 	"license": "MIT",
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"esbuild"
+		]
+	},
 	"dependencies": {
 		"@chakra-ui/react": "2.8.2",
 		"@emotion/cache": "11.11.0",

@@ -45,7 +45,15 @@ app.get('/api/discord/*', async (c) => {
 		headers,
 	}).catch((e) => e);
 
-	if (res instanceof Error) return new Response(JSON.stringify({ error: 'Internal Server Error.', status: 500 }), { status: 500 });
+	if (res instanceof Error) {
+		LoggerModule('DiscordProxy', `${targetPath} - fetch error: ${res.message}`, 'red');
+		return new Response(JSON.stringify({ error: 'Internal Server Error.', status: 500 }), { status: 500 });
+	}
+
+	if (!res.ok) {
+		const errBody = await res.text().catch(() => '');
+		LoggerModule('DiscordProxy', `${targetPath} - Discord returned ${res.status}: ${errBody.slice(0, 200)}`, 'red');
+	}
 
 	const body = await res.json().catch(() => res.text());
 	return new Response(JSON.stringify(body), { status: res.status, statusText: res.statusText });
@@ -67,8 +75,19 @@ app.post('/api/crypto', async (c) => {
 			default: return new Response(JSON.stringify({ error: 'Bad Request.', status: 400 }), { status: 400 });
 		}
 	} catch (e) {
+		LoggerModule('Crypto', `Error: ${e instanceof Error ? e.message : String(e)}`, 'red');
 		return new Response(JSON.stringify({ error: 'Internal Server Error.', status: 500 }), { status: 500 });
 	}
+});
+
+/* -------------------- Error Handling -------------------- */
+
+app.onError((err, c) => {
+	LoggerModule('HonoError', `Unhandled error: ${err.message}`, 'red');
+	if (err instanceof Error && err.stack) {
+		LoggerModule('HonoError', err.stack, 'red');
+	}
+	return new Response(JSON.stringify({ error: 'Internal Server Error.', status: 500 }), { status: 500 });
 });
 
 /* -------------------- Remix -------------------- */

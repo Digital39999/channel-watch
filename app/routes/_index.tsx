@@ -202,10 +202,18 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					},
 				}).then((res) => res.data).catch((err) => err.response?.data);
 
-				if (!dmsData || 'message' in dmsData) {
+			if (!dmsData || 'message' in dmsData) {
 					return typedjson({
 						status: 401,
 						error: dmsData?.message ? `${dmsData.message}.` : 'Invalid token.',
+					});
+				}
+
+				if (!Array.isArray(dmsData)) {
+					console.error('[getDMs] Expected array but got:', typeof dmsData, dmsData);
+					return typedjson({
+						status: 500,
+						error: 'Unexpected response from Discord API.',
 					});
 				}
 
@@ -275,8 +283,9 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 		await updateRecent(recentsData);
 		return typedjson({ status: 200, data: 'Success.' });
 	} catch (error) {
-		console.error('Action error:', error);
-		return typedjson({ status: 500, error: 'Internal server error.' });
+		const errMsg = error instanceof Error ? error.message : String(error);
+		console.error('Action error:', errMsg, error instanceof Error ? error.stack : '');
+		return typedjson({ status: 500, error: `Internal server error: ${errMsg}` });
 	}
 };
 
@@ -443,7 +452,7 @@ export default function Index() {
 								)}
 							</Flex>
 
-							{current.recentChannels.length > 0 && (
+							{current.recentChannels?.length > 0 && (
 								<>
 									<Divider my={4} />
 									<Grid gridTemplateColumns={{ base: '1fr', md: '1fr 1fr', lg: '1fr 1fr 1fr' }} gap={2} w='100%'>
@@ -504,7 +513,7 @@ export default function Index() {
 								)}
 							</Flex>
 
-							{current.dmChannels.length > 0 && (
+							{current.dmChannels?.length > 0 && (
 								<>
 									<Divider my={4} />
 									<Grid gridTemplateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={2} w='100%'>
@@ -634,7 +643,7 @@ export function DMChannelCard({
 		>
 			<Flex flex={1} justifyContent='space-between' alignItems='center'>
 				<Text fontSize='lg' color='alpha900' fontWeight='semibold'>
-					{channel.name.length > 20 ? `${channel.name.slice(0, 20)}..` : channel.name}
+					{channel.name?.length > 20 ? `${channel.name.slice(0, 20)}..` : channel.name}
 				</Text>
 
 				{channel.latestMessageTimestamp && (
@@ -704,7 +713,7 @@ export function RecentUsersSection({
 							p={4}
 						>
 							<Text fontSize='xl' color='alpha900'>
-								{recent.info.name.length > 20 ? `${recent.info.name.slice(0, 20)}..` : recent.info.name}
+								{recent.info.name?.length > 20 ? `${recent.info.name.slice(0, 20)}..` : recent.info.name}
 							</Text>
 
 							<HStack>

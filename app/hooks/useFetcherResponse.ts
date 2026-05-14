@@ -17,8 +17,8 @@ export default function useFetcherResponse(
 			toast({
 				title:
 					fetcher.data.status === 200
-						? fetcher.data.data
-						: Array.isArray(fetcher.data.error) ? fetcher.data.error[0] : fetcher.data.error,
+						? (fetcher.data.data ?? 'Success.')
+						: Array.isArray(fetcher.data.error) ? fetcher.data.error[0] : (fetcher.data.error ?? 'Unknown error.'),
 				status: fetcher.data.status === 200 ? 'success' : 'error',
 				variant: 'subtle',
 				position: 'bottom-right',

@@ -36,6 +36,8 @@ async function getGuild({ guildId, current }: GetGuildArgs) {
 	if (!guildData) throw new Response(null, { status: 404, statusText: 'There was an error getting guild data.' });
 	else if ('message' in guildData) throw new Response(null, { status: 404, statusText: guildData.message });
 
+	if (Array.isArray(guildData)) throw new Response(null, { status: 404, statusText: 'Unexpected guild data format.' });
+
 	const guildChannels = await axios({
 		method: 'GET',
 		url: `/api/discord/guilds/${guildId}/channels`,
@@ -46,9 +48,11 @@ async function getGuild({ guildId, current }: GetGuildArgs) {
 	if (!guildChannels) throw new Response(null, { status: 404, statusText: 'There was an error getting guild channels.' });
 	else if ('message' in guildChannels) throw new Response(null, { status: 404, statusText: guildChannels.message });
 
+	if (!Array.isArray(guildChannels)) throw new Response(null, { status: 404, statusText: 'Unexpected guild channels format.' });
+
 	return {
 		...guildData,
-		channels: guildChannels || [],
+		channels: guildChannels,
 	};
 }
 
@@ -62,6 +66,8 @@ async function getMessages({ channelId, before, current }: GetMessagesArgs) {
 	}).then((res) => res.data).catch((err) => err.response?.data) as APIMessage[] | { message: string; };
 	if (!messageData) throw new Response(null, { status: 404, statusText: 'There was an error getting messages.' });
 	else if ('message' in messageData) throw new Response(null, { status: 404, statusText: messageData.message });
+
+	if (!Array.isArray(messageData)) throw new Response(null, { status: 404, statusText: 'Unexpected messages format.' });
 
 	return messageData.reverse();
 }
@@ -98,7 +104,7 @@ export const clientLoader = async ({ request, params }: ClientLoaderFunctionArgs
 
 	return typedjson({
 		info: current.info,
-		messages: messageData || [],
+		messages: Array.isArray(messageData) ? messageData : [],
 		channel: channelData,
 		guild: guildData,
 	});

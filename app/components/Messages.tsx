@@ -311,7 +311,7 @@ export function SingleMessage({
 				</DiscordAttachments>
 			)}
 
-			{message.embeds ? message.embeds.map((embed, index) => (
+			{Array.isArray(message.embeds) ? message.embeds.filter((embed) => embed.type === 'rich').map((embed, index) => (
 				<DiscordEmbed
 					key={`embed-${index}-${message.id}`}
 					color={embed.color ? getColorInHex(embed.color) : undefined}

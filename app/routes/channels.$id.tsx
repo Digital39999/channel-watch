@@ -1,15 +1,14 @@
+import { APIMessage, RESTGetAPIChannelMessagesResult, RESTGetAPIGuildChannelsResult, RESTGetAPIGuildResult } from 'discord-api-types/v10';
 import { Flex, VStack, Box, Text, IconButton, Divider, Tooltip, HStack, AbsoluteCenter, Spinner } from '@chakra-ui/react';
 import { ClientLoaderFunctionArgs, Link, useFetcher } from '@remix-run/react';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { GetGuildArgs, Channel, GetMessagesArgs } from '~/other/types';
 import { typedjson, useTypedLoaderData } from 'remix-typedjson';
-import { APIGuild, APIMessage } from 'discord-api-types/v10';
+import { GetGuildArgs, GetMessagesArgs } from '~/other/types';
+import { discordRequest, getRecent } from '~/other/utils';
 import { FaBackspace, FaDownload } from 'react-icons/fa';
 import { ClientOnly } from '~/components/ClientOnly';
 import { useRootData } from '~/hooks/useRootData';
 import { Messages } from '~/components/Messages';
-import { getRecent } from '~/other/utils';
-import axios from 'axios';
 
 const messagesLimit = 100;
 
@@ -27,29 +26,12 @@ function dedupeMessages<T extends { id: string }>(messages: T[]): T[] {
 }
 
 async function getGuild({ guildId, current }: GetGuildArgs) {
-	const guildData = await axios({
-		method: 'GET',
-		url: `/api/discord/guilds/${guildId}`,
-		headers: {
-			'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
-		},
-	}).then((res) => res.data).catch((err) => err.response?.data) as APIGuild | { message: string; };
-	if (!guildData) throw new Response(null, { status: 404, statusText: 'There was an error getting guild data.' });
-	else if ('message' in guildData) throw new Response(null, { status: 404, statusText: guildData.message });
+	const guildData = await discordRequest<RESTGetAPIGuildResult>('GET', `/guilds/${guildId}`, current.token, current.isBot);
+	if (guildData instanceof Error) throw new Response(null, { status: guildData.status || 500, statusText: guildData.message });
 
-	if (Array.isArray(guildData)) throw new Response(null, { status: 404, statusText: 'Unexpected guild data format.' });
-
-	const guildChannels = await axios({
-		method: 'GET',
-		url: `/api/discord/guilds/${guildId}/channels`,
-		headers: {
-			'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
-		},
-	}).then((res) => res.data).catch((err) => err.response?.data) as Channel[] | { message: string; };
-	if (!guildChannels) throw new Response(null, { status: 404, statusText: 'There was an error getting guild channels.' });
-	else if ('message' in guildChannels) throw new Response(null, { status: 404, statusText: guildChannels.message });
-
-	if (!Array.isArray(guildChannels)) throw new Response(null, { status: 404, statusText: 'Unexpected guild channels format.' });
+	const guildChannels = await discordRequest<RESTGetAPIGuildChannelsResult>('GET', `/guilds/${guildId}/channels`, current.token, current.isBot);
+	if (guildChannels instanceof Error) throw new Response(null, { status: guildChannels.status || 500, statusText: guildChannels.message });
+	if (!Array.isArray(guildChannels)) throw new Response(null, { status: 404, statusText: 'Unexpected channels format.' });
 
 	return {
 		...guildData,
@@ -58,16 +40,8 @@ async function getGuild({ guildId, current }: GetGuildArgs) {
 }
 
 async function getMessages({ channelId, before, current }: GetMessagesArgs) {
-	const messageData = await axios({
-		method: 'GET',
-		url: `/api/discord/channels/${channelId}/messages` + `?limit=${messagesLimit}` + (before ? `&before=${before}` : ''),
-		headers: {
-			'Authorization': `${current.isBot ? 'Bot ' : ''}${current.token}`,
-		},
-	}).then((res) => res.data).catch((err) => err.response?.data) as APIMessage[] | { message: string; };
-	if (!messageData) throw new Response(null, { status: 404, statusText: 'There was an error getting messages.' });
-	else if ('message' in messageData) throw new Response(null, { status: 404, statusText: messageData.message });
-
+	const messageData = await discordRequest<RESTGetAPIChannelMessagesResult>('GET', `/channels/${channelId}/messages?limit=${messagesLimit}` + (before ? `&before=${before}` : ''), current.token, current.isBot);
+	if (messageData instanceof Error) throw new Response(null, { status: messageData.status || 500, statusText: messageData.message });
 	if (!Array.isArray(messageData)) throw new Response(null, { status: 404, statusText: 'Unexpected messages format.' });
 
 	return messageData.reverse();

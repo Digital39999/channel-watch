@@ -1,7 +1,7 @@
-import { Recent, RecentChannel, RecentInfo, Recents, TimeUnits, WebReturnType } from './types';
+import { DiscordAPIError, Recent, RecentChannel, RecentInfo, Recents, TimeUnits, WebReturnType } from './types';
 import { APIChannel, APIGuild, ChannelType } from 'discord-api-types/v10';
+import axios, { AxiosError, Method } from 'axios';
 import { z, ZodError, ZodIssue } from 'zod';
-import axios, { AxiosError } from 'axios';
 
 const RecentInfoSchema = z.object({
 	id: z.string(),
@@ -118,6 +118,7 @@ export async function getRecent() {
 	if (!parsed.success) {
 		console.warn('Corrupted localStorage data cleared:', parseZodError(parsed.error));
 		localStorage.removeItem('recent');
+
 		return { currentIndex: -1, all: [] } as Recents;
 	}
 
@@ -140,6 +141,21 @@ export async function updateRecent(newData: Recents) {
 	else if ('error' in encryptedText) throw new Response(null, { status: 404, statusText: Array.isArray(encryptedText.error) ? encryptedText.error.join('. ') : encryptedText.error });
 
 	localStorage.setItem('recent', encryptedText.data);
+}
+
+export async function discordRequest<T>(method: Uppercase<Method>, endpoint: string, token: string, isBot?: boolean): Promise<T | AxiosError<T, DiscordAPIError>> {
+	return axios({
+		method,
+		url: '/api/discord/v10' + endpoint,
+		headers: {
+			'Authorization': `${isBot ? 'Bot ' : ''}${token}`,
+		},
+	}).then((res) => res.data as T).catch((err: AxiosError<T, DiscordAPIError>) => {
+		console.error(`Error during Discord API request to ${endpoint}:`, err);
+
+		if (err.response) return err;
+		else throw new Error('Network error or no response received from the server.');
+	});
 }
 
 export function time(number: number, from: TimeUnits = 's', to: TimeUnits = 'ms'): number {

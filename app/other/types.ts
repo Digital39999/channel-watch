@@ -1,4 +1,4 @@
-import { APIGuild, APITextChannel, APIGuildVoiceChannel, APINewsChannel } from 'discord-api-types/v10';
+import { APIGuild, APITextChannel, APIGuildVoiceChannel, APINewsChannel, APIChannel } from 'discord-api-types/v10';
 
 export type Recents = {
 	currentIndex?: number;
@@ -36,7 +36,7 @@ export type WebReturnType<T> = { status: 200; data: T; } | { status: 400 | 401 |
 
 export type SubmitType = 'login' | 'logout' | 'refresh' | 'checkChannel' | 'deleteChannel' | 'deleteUser' | 'getDMs';
 
-export type Guild = APIGuild & { channels: Channel[]; };
+export type Guild = APIGuild & { channels: APIChannel[]; };
 export type Channel = APITextChannel | APIGuildVoiceChannel | APINewsChannel;
 
 export type GetGuildArgs = {
@@ -48,4 +48,9 @@ export type GetMessagesArgs = {
 	channelId: string;
 	before?: string;
 	current: { isBot: boolean; token: string; };
+};
+
+export type DiscordAPIError = {
+    code: number;
+    message: string;
 };

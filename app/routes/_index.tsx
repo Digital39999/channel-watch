@@ -1,6 +1,6 @@
 import { Flex, VStack, SimpleGrid, HStack, Box, Input, Text, Divider, IconButton, Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Button, useToast, useColorMode, AbsoluteCenter, Spinner, useBreakpointValue, Grid } from '@chakra-ui/react';
-import { formatChannelName, formatTimestamp, getCurrentUser, getImage, getRecent, snowflakeToDate, updateRecent } from '~/other/utils';
-import { APIChannel, APIUser, ChannelType, APIMessage, APIGroupDMChannel, APIDMChannel, APIGuild } from 'discord-api-types/v10';
+import { discordRequest, formatChannelName, formatTimestamp, getCurrentUser, getImage, getRecent, snowflakeToDate, updateRecent } from '~/other/utils';
+import { APIChannel, ChannelType, APIMessage, APIGroupDMChannel, APIDMChannel, APIGuild, RESTGetAPICurrentUserResult } from 'discord-api-types/v10';
 import { FaCopy, FaFolderPlus, FaHashtag, FaRobot, FaTrash, FaUser, FaUserFriends } from 'react-icons/fa';
 import { WebReturnType, Recent, SubmitType, RecentChannel } from '~/other/types';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
@@ -11,7 +11,6 @@ import { FiLogIn, FiLogOut } from 'react-icons/fi';
 import { useRootData } from '~/hooks/useRootData';
 import { IoMdRefresh } from 'react-icons/io';
 import { typedjson } from 'remix-typedjson';
-import axios from 'axios';
 
 export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 	const formData = await request.formData();
@@ -28,30 +27,17 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 
 				const isBot = formData.get('isBot') === 'true';
 
-				const userData = await axios({
-					method: 'GET',
-					url: '/api/discord/v10/users/@me',
-					headers: {
-						'Authorization': `${isBot ? 'Bot ' : ''}${token}`,
-					},
-				}).then((res) => res.data).catch((err) => err.response?.data);
+				const userData = await discordRequest<RESTGetAPICurrentUserResult>('GET', '/users/@me', token, isBot);
+				if (userData instanceof Error) return typedjson({ status: userData.status || 500, error: userData.message });
 
-				if (!userData || 'message' in userData) {
-					return typedjson({
-						status: 401,
-						error: userData?.message ? `${userData.message}.` : 'Invalid token.',
-					});
-				}
-
-				const user = userData as APIUser;
 				const userInfo = {
-					id: user.id,
-					name: user.username,
-					avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${user.avatar.startsWith('a_') ? 'gif' : 'png'}` : null,
+					id: userData.id,
+					name: userData.username,
+					avatar: userData.avatar ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.${userData.avatar.startsWith('a_') ? 'gif' : 'png'}` : null,
 				};
 
 				if (!recentsData.all) recentsData.all = [];
-				const existingUserIndex = recentsData.all.findIndex((u) => u.info?.id === user.id);
+				const existingUserIndex = recentsData.all.findIndex((u) => u.info.id === userData.id);
 
 				if (existingUserIndex === -1) {
 					recentsData.all.push({
@@ -84,26 +70,13 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				const currentUser = getCurrentUser(recentsData);
 				if (!currentUser) return typedjson({ status: 400, error: 'No user logged in.' });
 
-				const userData = await axios({
-					method: 'GET',
-					url: '/api/discord/v10/users/@me',
-					headers: {
-						'Authorization': `${currentUser.isBot ? 'Bot ' : ''}${currentUser.token}`,
-					},
-				}).then((res) => res.data).catch((err) => err.response?.data);
+				const userData = await discordRequest<RESTGetAPICurrentUserResult>('GET', '/users/@me', currentUser.token, currentUser.isBot);
+				if (userData instanceof Error) return typedjson({ status: userData.status || 500, error: userData.message });
 
-				if (!userData || 'message' in userData) {
-					return typedjson({
-						status: 401,
-						error: userData?.message ? `${userData.message}.` : 'Invalid token.',
-					});
-				}
-
-				const user = userData as APIUser;
 				currentUser.info = {
-					id: user.id,
-					name: user.username,
-					avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${user.avatar.startsWith('a_') ? 'gif' : 'png'}` : null,
+					id: userData.id,
+					name: userData.username,
+					avatar: userData.avatar ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.${userData.avatar.startsWith('a_') ? 'gif' : 'png'}` : null,
 				};
 
 				break;
@@ -116,22 +89,9 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				const channelId = formData.get('channel') as string;
 				if (!channelId) return typedjson({ status: 400, error: 'Channel ID is required.' });
 
-				const channelData = await axios({
-					method: 'GET',
-					url: `/api/discord/channels/${channelId}`,
-					headers: {
-						'Authorization': `${currentUser.isBot ? 'Bot ' : ''}${currentUser.token}`,
-					},
-				}).then((res) => res.data).catch((err) => err.response?.data);
+				const channelData = await discordRequest<APIChannel>('GET', `/channels/${channelId}`, currentUser.token, currentUser.isBot);
+				if (channelData instanceof Error) return typedjson({ status: channelData.status || 500, error: channelData.message });
 
-				if (!channelData || 'message' in channelData) {
-					return typedjson({
-						status: 401,
-						error: channelData?.message ? `${channelData.message}.` : 'Invalid channel.',
-					});
-				}
-
-				const channel = channelData as APIChannel;
 				const allowedTypes = [
 					ChannelType.GuildText,
 					ChannelType.GuildAnnouncement,
@@ -140,48 +100,29 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					ChannelType.GroupDM,
 				];
 
-				if (!allowedTypes.includes(channel.type)) {
+				if (!allowedTypes.includes(channelData.type)) {
 					return typedjson({
 						status: 403,
 						error: 'Invalid channel type. Only text, announcement, voice, and DM channels are allowed.',
 					});
 				}
 
-				const guildData = ('guild_id' in channel ? await axios({
-					method: 'GET',
-					url: `/api/discord/guilds/${channel.guild_id}`,
-					headers: {
-						'Authorization': `${currentUser.isBot ? 'Bot ' : ''}${currentUser.token}`,
-					},
-				}).then((res) => res.data).catch((err) => err.response?.data) : null) as APIGuild | null;
+				const guildData = ('guild_id' in channelData ? await discordRequest<APIGuild>('GET', `/guilds/${channelData.guild_id}`, currentUser.token, currentUser.isBot) : null) as APIGuild | null;
 
-				const messagesData = await axios({
-					method: 'GET',
-					url: `/api/discord/channels/${channelId}/messages?limit=1`,
-					headers: {
-						'Authorization': `${currentUser.isBot ? 'Bot ' : ''}${currentUser.token}`,
-					},
-				}).then((res) => res.data).catch((err) => err.response?.data);
+				const messagesData = await discordRequest<APIMessage[]>('GET', `/channels/${channelId}/messages?limit=1`, currentUser.token, currentUser.isBot);
+				if (messagesData instanceof Error) return typedjson({ status: messagesData.status || 500, error: messagesData.message });
 
-				if (!messagesData || 'message' in messagesData) {
-					return typedjson({
-						status: 403,
-						error: messagesData?.message ? `${messagesData.message}.` : "Couldn't get channel messages.",
-					});
-				}
-
-				const messages = messagesData as APIMessage[];
-				const channelName = formatChannelName(channel, currentUser.info.id);
+				const channelName = formatChannelName(channelData, currentUser.info.id);
 				if (!currentUser.recentChannels) currentUser.recentChannels = [];
 
-				const existingChannelIndex = currentUser.recentChannels.findIndex((c) => c.id === channel.id);
+				const existingChannelIndex = currentUser.recentChannels.findIndex((c) => c.id === channelData.id);
 				const channelInfo: RecentChannel = {
-					id: channel.id,
+					id: channelData.id,
 					name: channelName,
-					guildId: 'guild_id' in channel ? channel.guild_id : undefined,
-					latestMessageTimestamp: messages[0]?.timestamp,
-					isFromDm: channel.type === ChannelType.DM || channel.type === ChannelType.GroupDM,
-					imageUrl: getImage(channel, guildData),
+					guildId: 'guild_id' in channelData ? channelData.guild_id : undefined,
+					latestMessageTimestamp: messagesData[0]?.timestamp,
+					isFromDm: channelData.type === ChannelType.DM || channelData.type === ChannelType.GroupDM,
+					imageUrl: getImage(channelData, guildData),
 				};
 
 				if (existingChannelIndex === -1) currentUser.recentChannels.push(channelInfo);
@@ -194,32 +135,11 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 				const currentUser = getCurrentUser(recentsData);
 				if (!currentUser) return typedjson({ status: 400, error: 'No user logged in.' });
 
-				const dmsData = await axios({
-					method: 'GET',
-					url: '/api/discord/v10/users/@me/channels',
-					headers: {
-						'Authorization': `${currentUser.isBot ? 'Bot ' : ''}${currentUser.token}`,
-					},
-				}).then((res) => res.data).catch((err) => err.response?.data);
+				const dmChannels = await discordRequest<APIChannel[]>('GET', '/users/@me/channels', currentUser.token, currentUser.isBot);
+				if (dmChannels instanceof Error) return typedjson({ status: dmChannels.status || 500, error: dmChannels.message });
 
-				if (!dmsData || 'message' in dmsData) {
-					return typedjson({
-						status: 401,
-						error: dmsData?.message ? `${dmsData.message}.` : 'Invalid token.',
-					});
-				}
-
-				if (!Array.isArray(dmsData)) {
-					console.error('Expected array but got:', typeof dmsData, dmsData);
-					return typedjson({
-						status: 500,
-						error: 'Unexpected response from Discord API.',
-					});
-				}
-
-				const dmChannels = dmsData as (APIDMChannel | APIGroupDMChannel)[];
 				const allowedTypes = [ChannelType.DM, ChannelType.GroupDM];
-				const filteredChannels = dmChannels.filter((c) => allowedTypes.includes(c.type));
+				const filteredChannels = dmChannels.filter((c) => allowedTypes.includes(c.type)) as (APIDMChannel | APIGroupDMChannel)[];
 
 				if (!currentUser.dmChannels || !Array.isArray(currentUser.dmChannels)) currentUser.dmChannels = [];
 

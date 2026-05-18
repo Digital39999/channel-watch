@@ -1,7 +1,7 @@
 import { Flex, VStack, SimpleGrid, HStack, Box, Input, Text, Divider, IconButton, Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, Button, useToast, useColorMode, AbsoluteCenter, Spinner, useBreakpointValue, Grid } from '@chakra-ui/react';
 import { discordRequest, formatChannelName, formatTimestamp, getCurrentUser, getImage, getRecent, snowflakeToDate, updateRecent } from '~/other/utils';
 import { APIChannel, ChannelType, APIMessage, APIGroupDMChannel, APIDMChannel, APIGuild, RESTGetAPICurrentUserResult } from 'discord-api-types/v10';
-import { FaCopy, FaFolderPlus, FaHashtag, FaRobot, FaTrash, FaUser, FaUserFriends } from 'react-icons/fa';
+import { FaCopy, FaFolderPlus, FaKey, FaRobot, FaTrash, FaUser, FaUserFriends } from 'react-icons/fa';
 import { WebReturnType, Recent, SubmitType, RecentChannel } from '~/other/types';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { ClientActionFunctionArgs, useFetcher } from '@remix-run/react';
@@ -58,6 +58,20 @@ export const clientAction = async ({ request }: ClientActionFunctionArgs) => {
 					existingUser.info = userInfo;
 					recentsData.currentIndex = existingUserIndex;
 				}
+				break;
+			}
+
+			case 'switch': {
+				const userId = formData.get('userId') as string;
+				if (!userId) return typedjson({ status: 400, error: 'User ID is required.' });
+
+				if (!recentsData.all) return typedjson({ status: 400, error: 'No recent users.' });
+
+				const userIndex = recentsData.all.findIndex((u) => u.info.id === userId);
+				if (userIndex === -1) return typedjson({ status: 404, error: 'User not found in recents.' });
+
+				recentsData.all[userIndex].lastUsed = Date.now();
+				recentsData.currentIndex = userIndex;
 				break;
 			}
 
@@ -449,10 +463,9 @@ export default function Index() {
 							type: 'deleteUser',
 							token,
 						})}
-						onLoginUser={(recent) => submitRequest('login', {
-							type: 'login',
-							isBot: recent.isBot,
-							token: recent.token,
+						onLoginUser={(recent) => submitRequest('switch', {
+							type: 'switch',
+							userId: recent.info.id,
 						})}
 					/>
 				) : null}
@@ -638,8 +651,8 @@ export function RecentUsersSection({
 
 								<IconButton
 									aria-label='View'
-									icon={<FaHashtag />}
-									isLoading={currentlySubmitting === 'login'}
+									icon={<FaKey />}
+									isLoading={currentlySubmitting === 'switch'}
 									onClick={() => onLoginUser(recent)}
 								/>
 							</HStack>

@@ -1,6 +1,6 @@
 import { DiscordActionRow, DiscordAttachments, DiscordAudioAttachment, DiscordButton, DiscordCommand, DiscordEmbed, DiscordEmbedDescription, DiscordEmbedField, DiscordEmbedFields, DiscordEmbedFooter, DiscordFileAttachment, DiscordImageAttachment, DiscordMessage, DiscordMessages, DiscordReaction, DiscordReactions, DiscordReply, DiscordStringSelectMenu, DiscordStringSelectMenuOption, DiscordSystemMessage, DiscordThread, DiscordVideoAttachment } from '@skyra/discord-components-react';
 import { APIChannel, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType } from 'discord-api-types/v10';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
 import { Text, useColorMode } from '@chakra-ui/react';
 import { Guild } from '~/other/types';
 
@@ -69,9 +69,21 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 		return channels;
 	}, [guild?.channels]);
 
+	const grouped = useMemo(() => {
+		const GROUP_GAP = 7 * 60 * 1000;
+		return messages.map((msg, i) => {
+			if (i === 0) return { message: msg, isFirst: true };
+			const prev = messages[i - 1];
+			const sameAuthor = msg.author?.id === prev.author?.id;
+			const timeGap = new Date(msg.timestamp).getTime() - new Date(prev.timestamp).getTime();
+			const bothNormal = NormalMessages.includes(msg.type) && NormalMessages.includes(prev.type);
+			return { message: msg, isFirst: !bothNormal || !sameAuthor || timeGap > GROUP_GAP };
+		});
+	}, [messages]);
+
 	return (
 		<DiscordMessages lightTheme={colorMode === 'light'} compactMode={false}>
-			{messages.map((message) => {
+			{grouped.map(({ message, isFirst }) => {
 				if (!NormalMessages.includes(message.type)) return SystemMessage({ message, guild, key: message.id });
 				else return (
 					<SingleMessage
@@ -80,6 +92,7 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 						loggedIn={loggedIn}
 						message={message}
 						getRole={getRole}
+						isFirstInGroup={isFirst}
 
 						allChannels={allChannels}
 						highlighted={highlighted === message.id}
@@ -101,6 +114,7 @@ export function SingleMessage({
 	highlighted = false,
 
 	setHighlighted,
+	isFirstInGroup = true,
 }: {
 	loggedIn?: string;
 	message: APIMessage;
@@ -110,6 +124,7 @@ export function SingleMessage({
 	highlighted: boolean;
 
 	setHighlighted: (id: string) => void;
+	isFirstInGroup?: boolean;
 }) {
 	const mentions = useMemo(() => {
 		const users = new Map<string, APIUser>();
@@ -174,22 +189,46 @@ export function SingleMessage({
 	// const hasTenorVideo = useMemo(() => getTenorVideo(message.content) !== null, [getTenorVideo, message.content]);
 
 	const { colorMode } = useColorMode();
+	const msgRef = useRef<ElementRef<typeof DiscordMessage> | null>(null);
+
+	const displayTimestamp = useMemo(() => {
+		const d = new Date(message.timestamp);
+		return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+	}, [message.timestamp]);
+
+	useEffect(() => {
+		const el = msgRef.current as HTMLElement | null;
+		if (!el) return;
+		if (!isFirstInGroup) {
+			el.setAttribute('message-body-only', '');
+			el.setAttribute('timestamp', displayTimestamp);
+		} else {
+			el.removeAttribute('message-body-only');
+		}
+	}, [isFirstInGroup, displayTimestamp]);
+
+	const msgProps: Record<string, unknown> = {
+		verified: true,
+		id: message.id,
+		author: message.author?.username || 'Unknown User',
+		avatar: message.author?.avatar ? `https://cdn.discordapp.com/avatars/${message.author.id}/${message.author.avatar}.${message.author.avatar.startsWith('a_') ? 'gif' : 'png'}` : undefined,
+		highlight: message.mention_everyone || message.mentions.some((mention) => mention.id === loggedIn),
+		edited: message.edited_timestamp !== null,
+		roleColor: colorMode === 'light' ? '#000000' : '#ffffff',
+		lightTheme: colorMode === 'light',
+		bot: message.author?.bot ?? false,
+		style: { backgroundColor: highlighted ? (colorMode === 'light' ? '#f0f0f0' : '#272939') : undefined },
+		key: message.id,
+	};
+
+	if (isFirstInGroup) {
+		msgProps.timestamp = new Date(message.timestamp);
+	} else {
+		msgProps.timestamp = displayTimestamp;
+	}
 
 	return (
-		<DiscordMessage
-			verified
-			id={message.id}
-			author={message.author?.username || 'Unknown User'}
-			avatar={message.author?.avatar ? `https://cdn.discordapp.com/avatars/${message.author.id}/${message.author.avatar}.${message.author.avatar.startsWith('a_') ? 'gif' : 'png'}` : undefined}
-			highlight={message.mention_everyone || message.mentions.some((mention) => mention.id === loggedIn)}
-			edited={message.edited_timestamp !== null}
-			timestamp={new Date(message.timestamp)}
-			roleColor={colorMode === 'light' ? '#000000' : '#ffffff'}
-			lightTheme={colorMode === 'light'}
-			bot={message.author?.bot ?? false}
-			style={{ backgroundColor: highlighted ? (colorMode === 'light' ? '#f0f0f0' : '#272939') : undefined }}
-			key={message.id}
-		>
+		<DiscordMessage ref={msgRef} {...msgProps}>
 			{message.referenced_message?.id && (
 				<DiscordReply
 					verified
@@ -621,7 +660,8 @@ export function parseMentionsContent(content: string, mentions: Mentions, inEmbe
 	});
 
 	content = escapeHtml(content);
-	return restoreTokens(content, tokens);
+	const restored = restoreTokens(content, tokens);
+	return restored;
 }
 
 export function parseMarkdown(content: string, inEmbed: boolean) {
@@ -673,34 +713,42 @@ export function parseMarkdown(content: string, inEmbed: boolean) {
 		return `${prefix}${makeLink(url)}${trailing}`;
 	});
 
-	content = content.replace(/~~([^~]+)~~/g, (_, text: string) => {
-		return `<span style='text-decoration: line-through;'>${text}</span>`;
-	});
-
-	content = content.replace(/\|\|([^|]+)\|\|/g, (_, text: string) => {
-		return `<discord-spoiler>${text}</discord-spoiler>`;
-	});
-
-	content = content.replace(/\*\*([^\n]+?)\*\*/g, (_, text: string) => {
-		return `<discord-bold>${text}</discord-bold>`;
-	});
-
-	content = content.replace(/__([^\n]+?)__/g, (full, text: string) => {
-		if (full.startsWith(TOKEN_PREFIX)) return full;
-		return `<discord-underlined>${text}</discord-underlined>`;
-	});
-
-	content = content.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, (_, text: string) => {
-		return `<discord-italic>${text}</discord-italic>`;
-	});
-
-	content = content.replace(/(?<!_)_([^_\n]+)_(?!_)/g, (_, text: string) => {
-		return `<discord-italic>${text}</discord-italic>`;
-	});
+	{
+		const parts = content.split(TOKEN_REGEX);
+		const rebuilt: string[] = [];
+		for (let i = 0; i < parts.length; i++) {
+			if (i % 2 === 0) {
+				let segment = parts[i];
+				segment = segment.replace(/~~([^~]+)~~/g, (_, text: string) => {
+					return `<span style='text-decoration: line-through;'>${text}</span>`;
+				});
+				segment = segment.replace(/\|\|([^|]+)\|\|/g, (_, text: string) => {
+					return `<discord-spoiler>${text}</discord-spoiler>`;
+				});
+				segment = segment.replace(/\*\*([^\n]+?)\*\*/g, (_, text: string) => {
+					return `<discord-bold>${text}</discord-bold>`;
+				});
+				segment = segment.replace(/__([^\n]+?)__/g, (_, text: string) => {
+					return `<discord-underlined>${text}</discord-underlined>`;
+				});
+				segment = segment.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, (_, text: string) => {
+					return `<discord-italic>${text}</discord-italic>`;
+				});
+				segment = segment.replace(/(?<!_)_([^_\n]+)_(?!_)/g, (_, text: string) => {
+					return `<discord-italic>${text}</discord-italic>`;
+				});
+				rebuilt.push(segment);
+			} else {
+				rebuilt.push(`__CW_RENDER_TOKEN_${parts[i]}__`);
+			}
+		}
+		content = rebuilt.join('');
+	}
 
 	content = content.replace(/\n/g, '<br />');
 
-	return restoreTokens(content, tokens);
+	const restored = restoreTokens(content, tokens);
+	return restored;
 }
 
 export function isMessageOnlyEmojis(content: string) {

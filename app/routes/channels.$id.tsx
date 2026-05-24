@@ -138,11 +138,6 @@ export default function Channels() {
 		}
 	}, [fetcher.data]);
 
-	useEffect(() => {
-		if (fetcher.data?.messages?.length) console.log(`[Channels] Fetched ${fetcher.data?.messages.length} messages, total: ${messages.length}, last: ${lastMessageId}.`);
-		else console.log(`[Channels] Messages updated, total: ${messages.length}, last: ${lastMessageId}.`);
-	}, [fetcher.data, messages, lastMessageId]);
-
 	const loadNext = useCallback(() => {
 		if (!hasMore || !lastMessageId || fetcher.state === 'loading' || fetcher.state === 'submitting') return;
 		fetcher.load(`?before=${lastMessageId}`);

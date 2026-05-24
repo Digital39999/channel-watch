@@ -2,7 +2,7 @@ import { DiscordActionRow, DiscordAttachments, DiscordAudioAttachment, DiscordBu
 import { APIChannel, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType } from 'discord-api-types/v10';
 import { useCallback, useMemo, useState } from 'react';
 import { Text, useColorMode } from '@chakra-ui/react';
-import { Channel, Guild } from '~/other/types';
+import { Guild } from '~/other/types';
 
 const NormalMessages = [
 	MessageType.Default,
@@ -61,7 +61,7 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 	const getRole = useCallback((id: string) => allRoles.get(id), [allRoles]);
 
 	const allChannels = useMemo(() => {
-		const channels = new Map<string, Channel>();
+		const channels = new Map<string, APIChannel>();
 		for (const channel of guild?.channels || []) {
 			channels.set(channel.id, channel);
 		}
@@ -106,7 +106,7 @@ export function SingleMessage({
 	message: APIMessage;
 	getRole: (id: string) => APIRole | undefined;
 
-	allChannels: Map<string, Channel>;
+	allChannels: Map<string, APIChannel>;
 	highlighted: boolean;
 
 	setHighlighted: (id: string) => void;
@@ -685,7 +685,8 @@ export function parseMarkdown(content: string, inEmbed: boolean) {
 		return `<discord-bold>${text}</discord-bold>`;
 	});
 
-	content = content.replace(/__([^\n]+?)__/g, (_, text: string) => {
+	content = content.replace(/__([^\n]+?)__/g, (full, text: string) => {
+		if (full.startsWith(TOKEN_PREFIX)) return full;
 		return `<discord-underlined>${text}</discord-underlined>`;
 	});
 

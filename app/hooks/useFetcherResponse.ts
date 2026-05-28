@@ -10,23 +10,35 @@ export default function useFetcherResponse(
 		onSuccess?: (data: { status: 200; data: string; }) => void,
 		onFinish?: () => void,
 		onError?: () => void,
+		showSuccess?: boolean,
 	},
 ) {
 	useEffect(() => {
 		if (fetcher?.data) {
-			toast({
-				title:
-					fetcher.data.status === 200
-						? (fetcher.data.data ?? 'Success.')
-						: Array.isArray(fetcher.data.error) ? fetcher.data.error[0] : (fetcher.data.error ?? 'Unknown error.'),
-				status: fetcher.data.status === 200 ? 'success' : 'error',
-				variant: 'subtle',
-				position: 'bottom-right',
-				isClosable: true,
-			});
+			if (fetcher.data.status === 200) {
+				if (hooks.showSuccess !== false) {
+					toast({
+						title: (fetcher.data.data as string) ?? 'Success.',
+						status: 'success',
+						variant: 'subtle',
+						position: 'bottom-right',
+						isClosable: true,
+					});
+				}
 
-			if (fetcher.data.status === 200 && hooks.onSuccess) hooks.onSuccess(fetcher.data);
-			if (fetcher.data.status !== 200 && hooks.onError) hooks.onError();
+				if (hooks.onSuccess) hooks.onSuccess(fetcher.data);
+			} else {
+				toast({
+					title: Array.isArray(fetcher.data.error) ? fetcher.data.error[0] : (fetcher.data.error ?? 'Unknown error.'),
+					status: 'error',
+					variant: 'subtle',
+					position: 'bottom-right',
+					isClosable: true,
+				});
+
+				if (hooks.onError) hooks.onError();
+			}
+
 			if (hooks.onFinish) hooks.onFinish();
 		}
 	}, [fetcher.data]); // eslint-disable-line

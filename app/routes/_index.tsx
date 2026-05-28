@@ -235,7 +235,21 @@ export default function Index() {
 	const fetcher = useFetcher<WebReturnType<string>>();
 	const toast = useToast();
 
+	const fetchActions: SubmitType[] = ['refresh', 'checkChannel', 'getDMs', 'login'];
+
 	useFetcherResponse(fetcher, toast, {
+		showSuccess: false,
+		onSuccess: (data) => {
+			if (currentlySubmitting && fetchActions.includes(currentlySubmitting)) {
+				toast({
+					title: data.data ?? 'Success.',
+					status: 'success',
+					variant: 'subtle',
+					position: 'bottom-right',
+					isClosable: true,
+				});
+			}
+		},
 		onFinish: () => {
 			setCurrentlySubmitting(null);
 			setCurrentlyId(null);

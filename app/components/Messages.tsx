@@ -1,7 +1,7 @@
 import { DiscordActionRow, DiscordAttachments, DiscordAudioAttachment, DiscordButton, DiscordCommand, DiscordEmbed, DiscordEmbedDescription, DiscordEmbedField, DiscordEmbedFields, DiscordEmbedFooter, DiscordFileAttachment, DiscordImageAttachment, DiscordMessage, DiscordMessages, DiscordReaction, DiscordReactions, DiscordReply, DiscordStringSelectMenu, DiscordStringSelectMenuOption, DiscordSystemMessage, DiscordThread, DiscordVideoAttachment } from '@skyra/discord-components-react';
-import { APIChannel, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType } from 'discord-api-types/v10';
+import { APIChannel, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType, MessageReferenceType, StickerFormatType } from 'discord-api-types/v10';
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
-import { Text, useColorMode } from '@chakra-ui/react';
+import { Text, useColorMode, useToast } from '@chakra-ui/react';
 import { Guild } from '~/other/types';
 
 const NormalMessages = [
@@ -77,14 +77,15 @@ export function Messages({ messages, guild, loggedIn }: { messages: APIMessage[]
 			const sameAuthor = msg.author?.id === prev.author?.id;
 			const timeGap = new Date(msg.timestamp).getTime() - new Date(prev.timestamp).getTime();
 			const bothNormal = NormalMessages.includes(msg.type) && NormalMessages.includes(prev.type);
-			return { message: msg, isFirst: !bothNormal || !sameAuthor || timeGap > GROUP_GAP };
+			const isForwardOrReply = msg.message_reference?.type === MessageReferenceType.Forward || msg.referenced_message != null;
+			return { message: msg, isFirst: isForwardOrReply || !bothNormal || !sameAuthor || timeGap > GROUP_GAP };
 		});
 	}, [messages]);
 
 	return (
 		<DiscordMessages lightTheme={colorMode === 'light'} compactMode={false}>
 			{grouped.map(({ message, isFirst }) => {
-				if (!NormalMessages.includes(message.type)) return SystemMessage({ message, guild, key: message.id });
+				if (!NormalMessages.includes(message.type)) return <SystemMessage key={message.id} messageKey={message.id} message={message} guild={guild} />;
 				else return (
 					<SingleMessage
 						key={message.id}
@@ -168,6 +169,18 @@ export function SingleMessage({
 		return { users, roles };
 	}, [message.referenced_message, getRole]);
 
+	const { isForwarded, displayContent, displayAttachments, displayEmbeds, displayStickers } = useMemo(() => {
+		const isFwd = message.message_reference?.type === MessageReferenceType.Forward;
+		const snap = message.message_snapshots?.[0]?.message;
+		return {
+			isForwarded: isFwd,
+			displayContent: isFwd && snap ? snap.content ?? message.content : message.content,
+			displayAttachments: isFwd && snap ? snap.attachments ?? message.attachments : message.attachments,
+			displayEmbeds: isFwd && snap ? snap.embeds ?? message.embeds : message.embeds,
+			displayStickers: isFwd && snap ? [] : message.sticker_items,
+		};
+	}, [message.message_reference?.type, message.message_snapshots, message.content, message.attachments, message.embeds, message.sticker_items]);
+
 	const getButtonType = useCallback((style: ButtonStyle) => {
 		switch (style) {
 			case ButtonStyle.Primary: return 'primary';
@@ -190,6 +203,32 @@ export function SingleMessage({
 
 	const { colorMode } = useColorMode();
 	const msgRef = useRef<ElementRef<typeof DiscordMessage> | null>(null);
+	const toast = useToast();
+	const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const clearLongPress = useCallback(() => {
+		if (longPressTimer.current) {
+			clearTimeout(longPressTimer.current);
+			longPressTimer.current = null;
+		}
+	}, []);
+
+	const handlePointerDown = useCallback(() => {
+		longPressTimer.current = setTimeout(() => {
+			longPressTimer.current = null;
+			navigator.clipboard.writeText(JSON.stringify(message, null, '\t'));
+			toast({
+				title: 'Copied raw message JSON to clipboard.',
+				status: 'success',
+				duration: 2000,
+				isClosable: true,
+			});
+		}, 600);
+	}, [message, toast]);
+
+	const handlePointerUp = useCallback(() => {
+		clearLongPress();
+	}, [clearLongPress]);
 
 	const displayTimestamp = useMemo(() => {
 		const d = new Date(message.timestamp);
@@ -210,7 +249,7 @@ export function SingleMessage({
 	const msgProps: Record<string, unknown> = {
 		verified: true,
 		id: message.id,
-		author: message.author?.username || 'Unknown User',
+		author: `${message.author?.username || 'Unknown User'}${isForwarded ? ' (forwarded)' : ''}`,
 		avatar: message.author?.avatar ? `https://cdn.discordapp.com/avatars/${message.author.id}/${message.author.avatar}.${message.author.avatar.startsWith('a_') ? 'gif' : 'png'}` : undefined,
 		highlight: message.mention_everyone || message.mentions.some((mention) => mention.id === loggedIn),
 		edited: message.edited_timestamp !== null,
@@ -228,7 +267,13 @@ export function SingleMessage({
 	}
 
 	return (
-		<DiscordMessage ref={msgRef} {...msgProps}>
+		<DiscordMessage ref={msgRef} {...msgProps}
+			onMouseDown={handlePointerDown}
+			onMouseUp={handlePointerUp}
+			onMouseLeave={handlePointerUp}
+			onTouchStart={handlePointerDown}
+			onTouchEnd={handlePointerUp}
+			onTouchCancel={handlePointerUp}>
 			{message.referenced_message?.id && (
 				<DiscordReply
 					verified
@@ -276,7 +321,7 @@ export function SingleMessage({
 				/>
 			)}
 
-			{parseText(message.content, { ...mentions, channels: allChannels }, false)}
+			{parseText(displayContent, { ...mentions, channels: allChannels }, false)}
 
 			{/* {hasTenorVideo && (
 				<DiscordTenorVideo slot='attachments' url={getTenorVideo(message.content)!} />
@@ -293,9 +338,20 @@ export function SingleMessage({
 				</DiscordThread>
 			)}
 
-			{message.attachments && message.attachments.length > 0 && (
+			{((displayStickers && displayStickers.length > 0) || (displayAttachments && displayAttachments.length > 0)) && (
 				<DiscordAttachments slot='attachments' key={`attachments-${message.id}`}>
-					{message.attachments.map((attachment, index) => {
+					{displayStickers?.map((sticker, index) => {
+						const ext = sticker.format_type === StickerFormatType.GIF ? 'gif' : 'png';
+						return (
+							<img
+								key={`sticker-${index}-${message.id}`}
+								src={`https://media.discordapp.net/stickers/${sticker.id}.${ext}?size=160`}
+								alt={sticker.name}
+								style={{ maxWidth: 160, maxHeight: 160, borderRadius: 4, objectFit: 'contain' }}
+							/>
+						);
+					})}
+					{displayAttachments?.map((attachment, index) => {
 						if (attachment.content_type?.startsWith('image/')) {
 							return (
 								<DiscordImageAttachment
@@ -350,7 +406,7 @@ export function SingleMessage({
 				</DiscordAttachments>
 			)}
 
-			{Array.isArray(message.embeds) ? message.embeds.filter((embed) => embed.type === 'rich').map((embed, index) => (
+			{Array.isArray(displayEmbeds) ? displayEmbeds.filter((embed) => embed.type === 'rich').map((embed, index) => (
 				<DiscordEmbed
 					key={`embed-${index}-${message.id}`}
 					color={embed.color ? getColorInHex(embed.color) : undefined}
@@ -464,7 +520,7 @@ export function SingleMessage({
 	);
 }
 
-export function SystemMessage({ message, guild, key }: { message: APIMessage; guild: Guild | null; key: string; }) {
+export function SystemMessage({ message, guild, messageKey }: { message: APIMessage; guild: Guild | null; messageKey: string; }) {
 	type Type = 'thread' | 'join' | 'alert' | 'error' | 'boost' | 'call' | 'edit' | 'leave' | 'missed-call' | 'pin' | 'upgrade';
 
 	const { colorMode } = useColorMode();
@@ -472,7 +528,7 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 	const getSystemMessage = useCallback((m: APIMessage, type: Type, content?: string, channelName?: boolean) => {
 		return (
 			<DiscordSystemMessage
-				key={key}
+				key={messageKey}
 				lightTheme={colorMode === 'light'}
 				timestamp={new Date(m.timestamp)}
 				channelName={channelName}
@@ -491,7 +547,7 @@ export function SystemMessage({ message, guild, key }: { message: APIMessage; gu
 				)}
 			</DiscordSystemMessage>
 		);
-	}, [colorMode, key, message.thread]);
+	}, [colorMode, messageKey, message.thread]);
 
 	const formattedDateDifference = useCallback((timestamp1: string, timestamp2: string) => {
 		const timestamp1Date = new Date(timestamp1).getTime();

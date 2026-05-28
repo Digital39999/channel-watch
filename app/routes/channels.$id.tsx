@@ -111,7 +111,7 @@ export default function Channels() {
 		setMessages(normalizedInitialMessages);
 		setHasMore(normalizedInitialMessages.length >= messagesLimit);
 		messageIdsRef.current = new Set(normalizedInitialMessages.map((message) => message.id));
-	}, [normalizedInitialMessages, channel?.id]);
+	}, [channel?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useEffect(() => {
 		if (fetcher.data) {

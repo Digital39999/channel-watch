@@ -2,6 +2,7 @@ import { DiscordActionRow, DiscordAttachments, DiscordAudioAttachment, DiscordBu
 import { APIChannel, APIMessage, APIRole, APIUser, ButtonStyle, ChannelType, ComponentType, MessageType, MessageReferenceType, StickerFormatType } from 'discord-api-types/v10';
 import { useCallback, useEffect, useMemo, useRef, useState, type ElementRef } from 'react';
 import { Text, useColorMode, useToast } from '@chakra-ui/react';
+import { useLongPress } from '~/hooks/useLongPress';
 import { Guild } from '~/other/types';
 
 const NormalMessages = [
@@ -204,35 +205,29 @@ export function SingleMessage({
 	const { colorMode } = useColorMode();
 	const msgRef = useRef<ElementRef<typeof DiscordMessage> | null>(null);
 	const toast = useToast();
-	const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	const clearLongPress = useCallback(() => {
-		if (longPressTimer.current) {
-			clearTimeout(longPressTimer.current);
-			longPressTimer.current = null;
-		}
-	}, []);
-
-	const handlePointerDown = useCallback(() => {
-		longPressTimer.current = setTimeout(() => {
-			longPressTimer.current = null;
-			navigator.clipboard.writeText(JSON.stringify(message, null, '\t'));
-			toast({
-				title: 'Copied raw message JSON to clipboard.',
-				status: 'success',
-				duration: 2000,
-				isClosable: true,
-			});
-		}, 600);
+	const copyMessageJSON = useCallback(() => {
+		navigator.clipboard.writeText(JSON.stringify(message, null, '\t'));
+		toast({
+			title: 'Copied raw message JSON to clipboard.',
+			status: 'success',
+			duration: 2000,
+			isClosable: true,
+		});
 	}, [message, toast]);
 
-	const handlePointerUp = useCallback(() => {
-		clearLongPress();
-	}, [clearLongPress]);
+	const longPress = useLongPress({ onLongPress: copyMessageJSON });
 
 	const displayTimestamp = useMemo(() => {
 		const d = new Date(message.timestamp);
 		return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+	}, [message.timestamp]);
+
+	const fullTimestamp = useMemo(() => {
+		const d = new Date(message.timestamp);
+		const date = `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}/${d.getFullYear()}`;
+		const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+		return `${date} ${time}`;
 	}, [message.timestamp]);
 
 	useEffect(() => {
@@ -240,11 +235,10 @@ export function SingleMessage({
 		if (!el) return;
 		if (!isFirstInGroup) {
 			el.setAttribute('message-body-only', '');
-			el.setAttribute('timestamp', displayTimestamp);
 		} else {
 			el.removeAttribute('message-body-only');
 		}
-	}, [isFirstInGroup, displayTimestamp]);
+	}, [isFirstInGroup]);
 
 	const msgProps: Record<string, unknown> = {
 		verified: true,
@@ -258,22 +252,25 @@ export function SingleMessage({
 		bot: message.author?.bot ?? false,
 		style: { backgroundColor: highlighted ? (colorMode === 'light' ? '#f0f0f0' : '#272939') : undefined },
 		key: message.id,
+		twentyFour: true,
 	};
 
 	if (isFirstInGroup) {
-		msgProps.timestamp = new Date(message.timestamp);
+		msgProps.timestamp = fullTimestamp;
 	} else {
 		msgProps.timestamp = displayTimestamp;
 	}
 
 	return (
 		<DiscordMessage ref={msgRef} {...msgProps}
-			onMouseDown={handlePointerDown}
-			onMouseUp={handlePointerUp}
-			onMouseLeave={handlePointerUp}
-			onTouchStart={handlePointerDown}
-			onTouchEnd={handlePointerUp}
-			onTouchCancel={handlePointerUp}>
+			onMouseDown={longPress.onPointerDown}
+			onMouseUp={longPress.onPointerUp}
+			onMouseLeave={longPress.onPointerLeave}
+			onMouseMove={longPress.onPointerMove}
+			onTouchStart={longPress.onPointerDown}
+			onTouchEnd={longPress.onPointerUp}
+			onTouchCancel={longPress.onPointerUp}
+			onTouchMove={longPress.onPointerMove}>
 			{message.referenced_message?.id && (
 				<DiscordReply
 					verified
@@ -524,6 +521,19 @@ export function SystemMessage({ message, guild, messageKey }: { message: APIMess
 	type Type = 'thread' | 'join' | 'alert' | 'error' | 'boost' | 'call' | 'edit' | 'leave' | 'missed-call' | 'pin' | 'upgrade';
 
 	const { colorMode } = useColorMode();
+	const toast = useToast();
+
+	const copyMessageJSON = useCallback(() => {
+		navigator.clipboard.writeText(JSON.stringify(message, null, '\t'));
+		toast({
+			title: 'Copied raw message JSON to clipboard.',
+			status: 'success',
+			duration: 2000,
+			isClosable: true,
+		});
+	}, [message, toast]);
+
+	const longPress = useLongPress({ onLongPress: copyMessageJSON });
 
 	const getSystemMessage = useCallback((m: APIMessage, type: Type, content?: string, channelName?: boolean) => {
 		return (
@@ -533,6 +543,14 @@ export function SystemMessage({ message, guild, messageKey }: { message: APIMess
 				timestamp={new Date(m.timestamp)}
 				channelName={channelName}
 				type={type}
+				onMouseDown={longPress.onPointerDown}
+				onMouseUp={longPress.onPointerUp}
+				onMouseLeave={longPress.onPointerLeave}
+				onMouseMove={longPress.onPointerMove}
+				onTouchStart={longPress.onPointerDown}
+				onTouchEnd={longPress.onPointerUp}
+				onTouchCancel={longPress.onPointerUp}
+				onTouchMove={longPress.onPointerMove}
 			>
 				<span dangerouslySetInnerHTML={{ __html: sanitizeSystemMessageContent(content || m.content || '') }} />
 
@@ -547,7 +565,7 @@ export function SystemMessage({ message, guild, messageKey }: { message: APIMess
 				)}
 			</DiscordSystemMessage>
 		);
-	}, [colorMode, messageKey, message.thread]);
+	}, [colorMode, messageKey, message.thread, longPress]);
 
 	const formattedDateDifference = useCallback((timestamp1: string, timestamp2: string) => {
 		const timestamp1Date = new Date(timestamp1).getTime();
